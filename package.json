@@ -1,0 +1,69 @@
+{
+  "name": "@zakkster/lite-camera-pro",
+  "author": "Zahary Shinikchiev <shinikchiev@yahoo.com>",
+  "version": "1.0.0",
+  "description": "Cinematic camera system for Canvas2D games. Zero-GC, multi-target framing, noise-based shake, and timeline sequences.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "node": "./src/index.js",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "llms.txt",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/PeshoVurtoleta/lite-camera-pro#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PeshoVurtoleta/lite-camera-pro.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PeshoVurtoleta/lite-camera-pro/issues",
+    "email": "shinikchiev@yahoo.com"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/PeshoVurtoleta"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@zakkster/lite-camera": "^1.0.0",
+    "@zakkster/lite-ease": "^1.0.0",
+    "@zakkster/lite-lerp": "^1.0.0",
+    "@zakkster/lite-noise": "^1.0.0",
+    "@zakkster/lite-timeline": "^1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "vitest": "^4.1.4"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bundle-check": "esbuild ./src/index.js --bundle --format=esm --outfile=test-bundle.js",
+    "prepublishOnly": "npm run test && npm run bundle-check"
+  },
+  "keywords": [
+    "camera",
+    "cinematic",
+    "canvas2d",
+    "zero-gc",
+    "gamedev",
+    "html5",
+    "performance",
+    "screen-shake",
+    "parallax"
+  ]
+}

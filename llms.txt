@@ -1,0 +1,115 @@
+# @zakkster/lite-camera-pro
+
+> Cinematic Canvas2D camera system for games. Zero-GC in the update/render hot
+> path. Extends @zakkster/lite-camera's CinematicCamera. Adds smooth/eased zoom,
+> 5 follow modes, multi-target auto-framing, an 8-slot noise-based shake engine
+> with presets, fluent timeline sequences, a 16-layer parallax manager, per-edge
+> bounds, a debug HUD, and zero-alloc coordinate conversion.
+
+ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
+CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
+(constructor, createSequence, trackMultiple) may allocate.
+
+## Install
+npm install @zakkster/lite-camera-pro
+
+## Core class
+new CinematicCameraPro(viewW, viewH, worldW, worldH, seed = 42)
+
+Game loop (once per frame):
+  cam.update(dt, playerX, playerY, playerVX = 0, playerVY = 0)
+Render:
+  ctx.save(); cam.apply(ctx); drawWorld(ctx); cam.debug(ctx); ctx.restore();
+  cam.debugHUD(ctx);
+- apply(ctx): translates/scales/rotates the canvas to the camera transform (includes shake).
+- debug(ctx): WORLD-space overlay (deadzone, lookahead, world bounds). Call inside the apply transform.
+- debugHUD(ctx): SCREEN-space overlay (position, zoom, mode, per-slot trauma bars, sequence %). Call after restore.
+update() dispatches by priority: active sequence > multi-target > single-target follow mode.
+
+## Follow modes
+cam.setMode(FollowMode.SMOOTH | LOCK | PREDICTIVE | CUT | HYBRID)  // returns this
+- SMOOTH: deadzone + lookahead + lerp (default).
+- LOCK: instant snap, no interpolation.
+- PREDICTIVE: velocity extrapolation; tune cam.predictTime (seconds).
+- CUT: hard jump, zero lerp (cutscene transitions).
+- HYBRID: smooth horizontal, locked vertical; cam.hybridVerticalSnap = true|false.
+
+## Zoom
+cam.setZoom(level, duration = 0, ease = null)            // smooth eased zoom; duration 0 = instant
+cam.zoomAt(x, y, level, duration = 0, ease = null)        // zoom toward a static world point
+cam.zoomAt(targetObj, level, duration = 0, ease = null)   // zoom toward a moving {x,y}; anchor re-read each frame
+cam.minZoom, cam.maxZoom                                  // clamp limits
+cam.visibleW, cam.visibleH                                // cached visible area (viewW/zoom, viewH/zoom); use for culling
+
+## Coordinate conversion (zero-alloc, caller-owned out)
+const pt = { x: 0, y: 0 };          // allocate once
+cam.screenToWorld(sx, sy, pt);      // mutates pt, returns pt
+cam.worldToScreen(wx, wy, pt);      // mutates pt, returns pt
+
+## Multi-target framing
+cam.trackMultiple(targets, { padding, minZoom, maxZoom, zoomSpeed, followSpeed })  // auto-zoom + center on bbox
+cam.trackSingle()                                                                   // back to single-target follow
+cam.setTargetCount(n)                                                               // resize without reallocating
+targets: array of objects with numeric x, y.
+
+## Shake (8 simultaneous slots, summed; simplex-noise driven)
+cam.addTrauma(amount)                       // simple omnidirectional trauma (backward compatible)
+cam.shake(profile, intensity = 1)           // custom: { trauma, freq, decay, maxOffset, maxAngle, dirX, dirY }
+cam.shakePreset(name, intensity = 1)        // named preset
+cam.clearShakes()
+Preset names: 'explosion','earthquake','recoil','impact','landing','damage','rumble','heavy_impact'.
+Registry (named exports): registerPreset(name, profile), listPresets(), getPreset(name).
+Preset constants exported: EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT.
+
+## Sequences (fluent timeline; takes over position + zoom, blends back to follow on completion)
+const seq = cam.createSequence({ onComplete })
+  .moveTo(x, y, durationMs)
+  .zoomTo(level, durationMs)
+  .moveAndZoom(x, y, level, durationMs, { ease })
+  .shake(presetName)
+  .wait(ms)
+  .call(fn);
+cam.playSequence(seq);
+cam.stopSequence();                 // cancel + smooth return to follow
+seq.pause(); seq.resume(); seq.seek(ms);
+Sequence preset helpers (named exports, return a sequence): panTo(cam, x, y, ms),
+dramaticZoom(cam, x, y, level, ms), bossReveal(cam, x, y, ms), timedShake(cam, presetName, ms).
+Read cam.sequencePlaying (boolean).
+
+## Parallax (up to 16 layers)
+cam.addParallaxLayer(id, speedX, speedY = speedX, opts)   // re-adding same id updates it
+cam.removeParallaxLayer(id)
+cam.applyParallax(id, ctx)                                 // per-layer transform; wrap in ctx.save()/restore()
+WrapMode exported for layer wrapping behavior.
+
+## Bounds (per-edge: HARD | SOFT | ELASTIC | NONE)
+import { BoundsType } from '@zakkster/lite-camera-pro';
+cam.setBoundsType(BoundsType.SOFT)                          // returns this
+cam.setBoundsEdges({ left, right, top, bottom })            // each a BoundsType
+cam.setBoundsRect(x, y, w, h)                               // constrain to a rectangle (rooms/arenas)
+cam.clearBoundsRect()                                       // revert to full world
+Tuning: cam._bounds.softZone, cam._bounds.elasticMax, cam._bounds.elasticStrength.
+
+## Save / load
+const snap = cam.getState();   // { posX, posY, targetX, targetY, zoom, mode }
+cam.setState(snap);            // restores and recomputes visible dims
+cam.destroy();                 // releases internal state
+
+## Debug HUD
+cam.debugConfig.show.shake | parallax | bounds | ... = true|false   // toggle panels
+createDebugHUDConfig() exported to build a config; drawDebugWorld(cam, ctx, config) and drawDebugHUD(cam, ctx, config) are the underlying draws (cam.debug / cam.debugHUD wrap them).
+
+## Standalone functional API (tree-shakeable; the class composes these)
+Shake:    createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes
+Parallax: createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer
+Bounds:   createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds
+Multi:    createMultiTargetState, updateMultiTarget
+Sequence: createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake
+Enums:    FollowMode, FOLLOW_STRATEGIES, BoundsType, WrapMode
+
+## Dependencies (all @zakkster, first-party)
+@zakkster/lite-camera (base CinematicCamera), lite-ease, lite-lerp, lite-noise, lite-timeline.
+
+## Notes
+- Migration: CinematicCameraPro is a drop-in superset of lite-camera's CinematicCamera.
+- Zero-GC: coordinate conversion uses caller-owned out objects; visible dims are cached properties (no getVisibleArea()); shake (8) and parallax (16) slots are pre-allocated and reused.
