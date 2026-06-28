@@ -1,5 +1,14 @@
 # @zakkster/lite-camera-pro
 
+[![npm version](https://img.shields.io/npm/v/@zakkster/lite-camera-pro.svg?style=for-the-badge&color=latest)](https://www.npmjs.com/package/@zakkster/lite-camera-pro)
+![Zero-GC](https://img.shields.io/badge/Zero--GC-Hot%20path-00C853?style=for-the-badge&logo=leaf&logoColor=white)
+[![sponsor](https://img.shields.io/badge/sponsor-PeshoVurtoleta-ea4aaa.svg?logo=github)](https://github.com/sponsors/PeshoVurtoleta)
+[![npm bundle size](https://img.shields.io/bundlephobia/minzip/@zakkster/lite-camera-pro?style=for-the-badge)](https://bundlephobia.com/result?p=@zakkster/lite-camera-pro)
+[![npm downloads](https://img.shields.io/npm/dm/@zakkster/lite-camera-pro?style=for-the-badge&color=blue)](https://www.npmjs.com/package/@zakkster/lite-camera-pro)
+[![npm total downloads](https://img.shields.io/npm/dt/@zakkster/lite-camera-pro?style=for-the-badge&color=blue)](https://www.npmjs.com/package/@zakkster/lite-camera-pro)
+![TypeScript](https://img.shields.io/badge/TypeScript-Types-informational)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
 ### Cinematic Camera System for Canvas2D Games
 
 > Zero-GC. Zero external deps. Framework-agnostic.
