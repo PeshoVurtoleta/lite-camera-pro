@@ -6,6 +6,8 @@
 > with presets, fluent timeline sequences, a 16-layer parallax manager, per-edge
 > bounds, a debug HUD, and zero-alloc coordinate conversion.
 
+Version: 1.0.1
+
 ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
 CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
 (constructor, createSequence, trackMultiple) may allocate.

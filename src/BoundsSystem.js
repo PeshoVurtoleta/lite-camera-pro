@@ -11,7 +11,7 @@
  *
  * Zero allocations. All state is pre-allocated on the camera.
  *
- * Depends on: @zakkster/lite-lerp (clamp, smoothstep)
+ * Depends on: nothing (pure math -- clamp/smoothstep are inline).
  */
 
 /** @enum {number} */

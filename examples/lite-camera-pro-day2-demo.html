@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lite-camera-pro · Day 2 — Follow Modes</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #e2e0d8;
+    font-family: 'Outfit', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  header { padding: 24px 0 10px; text-align: center; }
+  header h1 {
+    font-size: 1.05rem; font-weight: 800; letter-spacing: 0.15em;
+    text-transform: uppercase; color: #fbbf24; margin-bottom: 2px;
+  }
+  header p {
+    font-size: 0.72rem; color: #6b7280;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  #wrap {
+    position: relative; border: 1px solid #1e1e2a;
+    border-radius: 6px; overflow: hidden;
+    box-shadow: 0 0 60px rgba(251, 191, 36, 0.04);
+  }
+
+  canvas { display: block; background: #111118; cursor: crosshair; }
+
+  .controls {
+    display: flex; gap: 6px; margin-top: 12px;
+    flex-wrap: wrap; justify-content: center; padding: 0 12px;
+  }
+
+  .controls button {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+    padding: 6px 12px; background: #1a1a24; color: #d4d0c8;
+    border: 1px solid #2a2a3a; border-radius: 4px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .controls button:hover { background: #2a2a3a; }
+  .controls button.active {
+    background: #fbbf24; color: #0a0a0f; border-color: #fbbf24;
+  }
+
+  .row-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; color: #4b5563; padding-top: 4px;
+    width: 100%; text-align: center;
+  }
+
+  .hint {
+    margin-top: 8px; font-size: 0.62rem; color: #4b5563;
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center; padding-bottom: 16px; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>lite-camera-pro</h1>
+  <p>day 2 — follow modes</p>
+</header>
+
+<div id="wrap"><canvas id="c"></canvas></div>
+
+<div class="controls">
+  <div class="row-label">follow mode</div>
+  <button id="btn-smooth" class="active" onclick="setMode(0)">smooth</button>
+  <button id="btn-lock" onclick="setMode(1)">lock</button>
+  <button id="btn-predictive" onclick="setMode(2)">predictive</button>
+  <button id="btn-cut" onclick="setMode(3)">cut</button>
+  <button id="btn-hybrid" onclick="setMode(4)">hybrid</button>
+
+  <div class="row-label">zoom</div>
+  <button onclick="cam.setZoom(2.0, 0.5, easeOutExpo)">2×</button>
+  <button onclick="cam.setZoom(0.5, 0.5, easeOutExpo)">0.5×</button>
+  <button onclick="cam.setZoom(1.0, 0.3, easeInOutCubic)">1×</button>
+  <button onclick="cam.addTrauma(0.6)">shake</button>
+</div>
+<p class="hint">WASD to move · 1–5 to switch modes · scroll to zoom · click to zoom-at-point</p>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  INLINED DEPS (standalone demo only)
+// ═══════════════════════════════════════════════════
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+
+const easeOutExpo = (t) => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = (t) => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)*0.5;
+
+class Random {
+  constructor(s=42){this.seed=s;this._state=s}
+  next(){let t=this._state+=0x6D2B79F5;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296}
+}
+
+// ═══════════════════════════════════════════════════
+//  FOLLOW STRATEGIES
+// ═══════════════════════════════════════════════════
+
+const FollowMode = { SMOOTH:0, LOCK:1, PREDICTIVE:2, CUT:3, HYBRID:4 };
+const MODE_NAMES = ['SMOOTH', 'LOCK', 'PREDICTIVE', 'CUT', 'HYBRID'];
+const MODE_COLORS = ['#fbbf24', '#22d3ee', '#a78bfa', '#ef4444', '#34d399'];
+
+function fSmooth(cam, dt, px, py, pvx, pvy) {
+  const len = Math.sqrt(pvx*pvx + pvy*pvy);
+  const tlx = len > 0 ? (pvx/len)*cam.lookaheadDist : 0;
+  const tly = len > 0 ? (pvy/len)*cam.lookaheadDist : 0;
+  cam.look[0] += (tlx - cam.look[0]) * cam.lookaheadSpeed * dt;
+  cam.look[1] += (tly - cam.look[1]) * cam.lookaheadSpeed * dt;
+  const hvw = cam.visibleW*0.5, hvh = cam.visibleH*0.5;
+  const dx = px + cam.look[0] - hvw, dy = py + cam.look[1] - hvh;
+  if (dx < cam.target[0] - cam.deadzoneX) cam.target[0] = dx + cam.deadzoneX;
+  else if (dx > cam.target[0] + cam.deadzoneX) cam.target[0] = dx - cam.deadzoneX;
+  if (dy < cam.target[1] - cam.deadzoneY) cam.target[1] = dy + cam.deadzoneY;
+  else if (dy > cam.target[1] + cam.deadzoneY) cam.target[1] = dy - cam.deadzoneY;
+}
+
+function fLock(cam, dt, px, py) {
+  const hvw = cam.visibleW*0.5, hvh = cam.visibleH*0.5;
+  cam.target[0] = px - hvw; cam.target[1] = py - hvh;
+  cam.pos[0] = cam.target[0]; cam.pos[1] = cam.target[1];
+  cam.look[0] = cam.look[1] = 0;
+}
+
+function fPredictive(cam, dt, px, py, pvx, pvy) {
+  const pt = cam.predictTime || 0.3;
+  const predX = px + pvx*pt, predY = py + pvy*pt;
+  const tlx = predX - px, tly = predY - py;
+  cam.look[0] += (tlx - cam.look[0]) * cam.lookaheadSpeed * dt;
+  cam.look[1] += (tly - cam.look[1]) * cam.lookaheadSpeed * dt;
+  const hvw = cam.visibleW*0.5, hvh = cam.visibleH*0.5;
+  cam.target[0] = px + cam.look[0] - hvw;
+  cam.target[1] = py + cam.look[1] - hvh;
+}
+
+function fCut(cam, dt, px, py) {
+  const hvw = cam.visibleW*0.5, hvh = cam.visibleH*0.5;
+  cam.target[0] = px - hvw; cam.target[1] = py - hvh;
+  cam.pos[0] = cam.target[0]; cam.pos[1] = cam.target[1];
+  cam.look[0] = cam.look[1] = 0;
+}
+
+function fHybrid(cam, dt, px, py, pvx, pvy) {
+  const len = Math.sqrt(pvx*pvx + pvy*pvy);
+  const tlx = len > 0 ? (pvx/len)*cam.lookaheadDist : 0;
+  cam.look[0] += (tlx - cam.look[0]) * cam.lookaheadSpeed * dt;
+  const hvw = cam.visibleW*0.5, hvh = cam.visibleH*0.5;
+  const dx = px + cam.look[0] - hvw;
+  if (dx < cam.target[0] - cam.deadzoneX) cam.target[0] = dx + cam.deadzoneX;
+  else if (dx > cam.target[0] + cam.deadzoneX) cam.target[0] = dx - cam.deadzoneX;
+  const dy = py - hvh;
+  cam.target[1] = dy; cam.pos[1] = dy;
+  cam.look[1] = 0;
+}
+
+const STRATEGIES = [fSmooth, fLock, fPredictive, fCut, fHybrid];
+
+// ═══════════════════════════════════════════════════
+//  CAMERA PRO (Day 1 + Day 2)
+// ═══════════════════════════════════════════════════
+
+class CinematicCameraPro {
+  constructor(vw, vh, ww, wh, seed=42) {
+    this.viewW=vw; this.viewH=vh; this.worldW=ww; this.worldH=wh;
+    this.pos=new Float32Array(2); this.target=new Float32Array(2); this.look=new Float32Array(2);
+    this.deadzoneX=40; this.deadzoneY=40;
+    this.lookaheadDist=80; this.lookaheadSpeed=8; this.lerpSpeed=5;
+    this.shakeTrauma=0; this.shakeMaxOffset=15; this.shakeMaxAngle=0.05;
+    this.rng=new Random(seed);
+    this._halfW=vw*0.5; this._halfH=vh*0.5;
+    this._maxX=ww-vw; this._maxY=wh-vh;
+    // Zoom
+    this.zoom=1; this.minZoom=0.25; this.maxZoom=4;
+    this._zoomFrom=1; this._zoomTo=1; this._zoomDur=0; this._zoomElapsed=0; this._zoomEase=null;
+    this._zoomAnchorX=0; this._zoomAnchorY=0; this._zoomTarget=null; this._hasAnchor=false;
+    this.visibleW=vw; this.visibleH=vh;
+    // Follow mode
+    this.mode = FollowMode.SMOOTH;
+    this.predictTime = 0.3;
+    this.hybridVerticalSnap = true;
+  }
+
+  addTrauma(a) { this.shakeTrauma = Math.min(1, this.shakeTrauma + a); }
+  setMode(m) { this.mode = m; return this; }
+
+  setZoom(level, dur=0, ease=null) {
+    level = clamp(level, this.minZoom, this.maxZoom);
+    if (dur<=0) { this.zoom=level; this._zoomDur=0; this._hasAnchor=false; this._updateBounds(); return this; }
+    this._zoomFrom=this.zoom; this._zoomTo=level; this._zoomDur=dur; this._zoomElapsed=0; this._zoomEase=ease; this._hasAnchor=false;
+    return this;
+  }
+
+  zoomAt(tx, ty, level, dur=0, ease=null) {
+    if (typeof tx === 'object' && tx !== null) {
+      this._zoomTarget=tx; this._zoomAnchorX=tx.x; this._zoomAnchorY=tx.y;
+      level=ty; dur=level||0; ease=dur; if(typeof ease!=='function')ease=null;
+    } else {
+      this._zoomTarget=null; this._zoomAnchorX=tx; this._zoomAnchorY=ty;
+    }
+    this._hasAnchor=true;
+    level=clamp(level, this.minZoom, this.maxZoom);
+    if(dur<=0){const p=this.zoom;this.zoom=level;this._zoomDur=0;this._adjustAnchor(p,this.zoom);this._hasAnchor=false;this._zoomTarget=null;this._updateBounds();return this;}
+    this._zoomFrom=this.zoom;this._zoomTo=level;this._zoomDur=dur;this._zoomElapsed=0;this._zoomEase=ease;
+    return this;
+  }
+
+  screenToWorld(sx, sy, out) { out.x=this.pos[0]+sx/this.zoom; out.y=this.pos[1]+sy/this.zoom; return out; }
+  worldToScreen(wx, wy, out) { out.x=(wx-this.pos[0])*this.zoom; out.y=(wy-this.pos[1])*this.zoom; return out; }
+
+  _updateBounds() {
+    this.visibleW=this.viewW/this.zoom; this.visibleH=this.viewH/this.zoom;
+    this._maxX=this.worldW-this.visibleW; this._maxY=this.worldH-this.visibleH;
+    if(this._maxX<0)this._maxX=0; if(this._maxY<0)this._maxY=0;
+  }
+
+  _adjustAnchor(oldZ, newZ) {
+    if(!this._hasAnchor||newZ===0) return;
+    const r=oldZ/newZ;
+    const nx=this._zoomAnchorX-(this._zoomAnchorX-this.pos[0])*r;
+    const ny=this._zoomAnchorY-(this._zoomAnchorY-this.pos[1])*r;
+    this.pos[0]=nx; this.pos[1]=ny; this.target[0]=nx; this.target[1]=ny;
+  }
+
+  update(dt, px, py, pvx=0, pvy=0) {
+    // Zoom anim
+    const pz=this.zoom;
+    if(this._zoomDur>0){
+      this._zoomElapsed+=dt;
+      let t=clamp(this._zoomElapsed/this._zoomDur,0,1);
+      if(this._zoomEase) t=this._zoomEase(t);
+      this.zoom=lerp(this._zoomFrom,this._zoomTo,t);
+      if(this._zoomElapsed>=this._zoomDur){this.zoom=this._zoomTo;this._zoomDur=0;}
+    }
+    if(this._hasAnchor&&this._zoomTarget){this._zoomAnchorX=this._zoomTarget.x;this._zoomAnchorY=this._zoomTarget.y;}
+    if(this._hasAnchor&&pz!==this.zoom)this._adjustAnchor(pz,this.zoom);
+    if(this._zoomDur<=0){this._hasAnchor=false;this._zoomTarget=null;}
+    this._updateBounds();
+
+    // Follow strategy
+    STRATEGIES[this.mode](this, dt, px, py, pvx, pvy);
+
+    // Bounds clamp
+    this.target[0]=this.target[0]<0?0:(this.target[0]>this._maxX?this._maxX:this.target[0]);
+    this.target[1]=this.target[1]<0?0:(this.target[1]>this._maxY?this._maxY:this.target[1]);
+
+    // Smooth follow (no-op for LOCK/CUT since pos==target)
+    this.pos[0]+=(this.target[0]-this.pos[0])*this.lerpSpeed*dt;
+    this.pos[1]+=(this.target[1]-this.pos[1])*this.lerpSpeed*dt;
+
+    if(this.shakeTrauma>0) this.shakeTrauma=Math.max(0,this.shakeTrauma-dt);
+  }
+
+  apply(ctx) {
+    let ox=0,oy=0,a=0;
+    if(this.shakeTrauma>0){
+      const s=this.shakeTrauma*this.shakeTrauma;
+      ox=Math.fround(this.shakeMaxOffset*s*(this.rng.next()*2-1));
+      oy=Math.fround(this.shakeMaxOffset*s*(this.rng.next()*2-1));
+      a=Math.fround(this.shakeMaxAngle*s*(this.rng.next()*2-1));
+    }
+    ctx.translate(ox,oy);
+    ctx.translate(this._halfW,this._halfH);
+    ctx.rotate(a);
+    ctx.scale(this.zoom,this.zoom);
+    ctx.translate(-this._halfW/this.zoom,-this._halfH/this.zoom);
+    ctx.translate(-(this.pos[0]|0),-(this.pos[1]|0));
+  }
+
+  debug(ctx) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(251,191,36,0.5)'; ctx.lineWidth=1;
+    const dx=this.target[0]-this.pos[0]+this._halfW/this.zoom;
+    const dy=this.target[1]-this.pos[1]+this._halfH/this.zoom;
+    ctx.strokeRect(dx-this.deadzoneX,dy-this.deadzoneY,this.deadzoneX*2,this.deadzoneY*2);
+    ctx.beginPath();
+    ctx.moveTo(dx-5,dy);ctx.lineTo(dx+5,dy);
+    ctx.moveTo(dx,dy-5);ctx.lineTo(dx,dy+5);
+    ctx.stroke(); ctx.restore();
+  }
+
+  debugHUD(ctx) {
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(4,4,210,82);
+    ctx.font='11px "JetBrains Mono",monospace';
+    const mc = MODE_COLORS[this.mode];
+    ctx.fillStyle=mc;
+    ctx.fillText(`mode: ${MODE_NAMES[this.mode]}`, 10, 18);
+    ctx.fillStyle='#fbbf24';
+    ctx.fillText(`zoom: ${this.zoom.toFixed(2)}`, 10, 32);
+    ctx.fillText(`pos: ${this.pos[0].toFixed(1)}, ${this.pos[1].toFixed(1)}`, 10, 46);
+    ctx.fillText(`vis: ${this.visibleW.toFixed(0)} × ${this.visibleH.toFixed(0)}`, 10, 60);
+    if(this.shakeTrauma>0){ctx.fillStyle='#ef4444';ctx.fillText(`trauma: ${this.shakeTrauma.toFixed(2)}`,10,74);}
+    ctx.restore();
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+//  DEMO SCENE
+// ═══════════════════════════════════════════════════
+
+const CW = Math.min(800, window.innerWidth - 24);
+const CH = 480;
+const WW = 2400, WH = 1600;
+
+const canvas = document.getElementById('c');
+canvas.width=CW; canvas.height=CH;
+document.getElementById('wrap').style.width = CW+'px';
+const ctx = canvas.getContext('2d');
+
+const cam = new CinematicCameraPro(CW, CH, WW, WH);
+window.cam = cam; // expose for button handlers
+
+const player = { x:400, y:400, vx:0, vy:0, speed:280, size:16 };
+const keys = {};
+const _pt = { x:0, y:0 }; // pre-allocated for screenToWorld
+
+window.addEventListener('keydown', (e) => {
+  keys[e.key.toLowerCase()] = true;
+  // Number keys for mode switching
+  const n = parseInt(e.key);
+  if (n >= 1 && n <= 5) setMode(n - 1);
+});
+window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  cam.screenToWorld(e.clientX - rect.left, e.clientY - rect.top, _pt);
+  const tz = cam.zoom > 1.3 ? 1.0 : 2.0;
+  cam.zoomAt(_pt.x, _pt.y, tz, 0.6, easeOutExpo);
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  cam.setZoom(cam.zoom + (e.deltaY > 0 ? -0.15 : 0.15), 0.2, easeOutCubic);
+}, { passive: false });
+
+const modeButtons = ['btn-smooth','btn-lock','btn-predictive','btn-cut','btn-hybrid'];
+window.setMode = function(m) {
+  cam.setMode(m);
+  modeButtons.forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === m);
+  });
+};
+
+// ── World ──
+const landmarks = [];
+const rng = new Random(99);
+for (let i = 0; i < 30; i++) {
+  landmarks.push({
+    x: 60+rng.next()*(WW-120), y: 60+rng.next()*(WH-120),
+    r: 10+rng.next()*30, hue: (rng.next()*360)|0,
+  });
+}
+
+function drawWorld() {
+  ctx.fillStyle='#13131d'; ctx.fillRect(0,0,WW,WH);
+  ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1;
+  for(let x=0;x<=WW;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,WH);ctx.stroke();}
+  for(let y=0;y<=WH;y+=100){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WW,y);ctx.stroke();}
+  ctx.strokeStyle='rgba(239,68,68,0.3)'; ctx.lineWidth=2; ctx.strokeRect(0,0,WW,WH);
+  for(const lm of landmarks){
+    ctx.fillStyle=`hsla(${lm.hue},60%,45%,0.35)`;
+    ctx.beginPath(); ctx.arc(lm.x,lm.y,lm.r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=`hsla(${lm.hue},70%,55%,0.5)`; ctx.lineWidth=1; ctx.stroke();
+  }
+  ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.font='10px monospace';
+  for(let x=0;x<=WW;x+=400) for(let y=0;y<=WH;y+=400) ctx.fillText(`${x},${y}`,x+4,y+12);
+}
+
+function drawPlayer() {
+  const s=player.size;
+  ctx.fillStyle='#fbbf24';
+  ctx.fillRect(player.x-s,player.y-s,s*2,s*2);
+  const len=Math.sqrt(player.vx*player.vx+player.vy*player.vy);
+  if(len>0){
+    ctx.strokeStyle='rgba(251,191,36,0.6)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(player.x,player.y);
+    ctx.lineTo(player.x+(player.vx/len)*30,player.y+(player.vy/len)*30);
+    ctx.stroke();
+  }
+}
+
+// ── Platforms for HYBRID demo ──
+function drawPlatforms() {
+  ctx.fillStyle = 'rgba(100,200,100,0.15)';
+  ctx.strokeStyle = 'rgba(100,200,100,0.35)';
+  ctx.lineWidth = 1;
+  const platforms = [
+    [200,500,300,20],[600,400,250,20],[1000,350,200,20],
+    [1400,450,280,20],[1800,300,220,20],[100,700,350,20],
+  ];
+  for (const [px,py,pw,ph] of platforms) {
+    ctx.fillRect(px,py,pw,ph);
+    ctx.strokeRect(px,py,pw,ph);
+  }
+}
+
+let lastTime = performance.now();
+function loop(now) {
+  const dt = Math.min((now-lastTime)/1000, 0.05);
+  lastTime = now;
+
+  player.vx=0; player.vy=0;
+  if(keys['w']||keys['arrowup'])   player.vy=-1;
+  if(keys['s']||keys['arrowdown']) player.vy=1;
+  if(keys['a']||keys['arrowleft']) player.vx=-1;
+  if(keys['d']||keys['arrowright'])player.vx=1;
+  const ilen=Math.sqrt(player.vx*player.vx+player.vy*player.vy);
+  if(ilen>0){player.vx/=ilen;player.vy/=ilen;}
+  player.x+=player.vx*player.speed*dt;
+  player.y+=player.vy*player.speed*dt;
+  player.x=clamp(player.x,player.size,WW-player.size);
+  player.y=clamp(player.y,player.size,WH-player.size);
+
+  cam.update(dt, player.x, player.y, player.vx*player.speed, player.vy*player.speed);
+
+  ctx.clearRect(0,0,CW,CH);
+  ctx.save();
+  cam.apply(ctx);
+  drawWorld();
+  drawPlatforms();
+  drawPlayer();
+  cam.debug(ctx);
+  ctx.restore();
+  cam.debugHUD(ctx);
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

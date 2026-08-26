@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lite-camera-pro · Interactive Tour</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;800&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0f;
+            color: #e2e0d8;
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar UI */
+        #sidebar {
+            width: 320px;
+            background: #111118;
+            border-right: 1px solid #1e1e2a;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            z-index: 10;
+        }
+
+        header h1 {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #fbbf24;
+            margin-bottom: 4px;
+        }
+
+        header p {
+            font-size: 0.75rem;
+            color: #6b7280;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 24px;
+        }
+
+        .scenario-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-grow: 1;
+        }
+
+        .scenario-btn {
+            background: transparent;
+            border: 1px solid #2a2a3a;
+            color: #8b8b9a;
+            text-align: left;
+            padding: 12px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .scenario-btn:hover {
+            border-color: #fbbf24;
+            color: #d4d0c8;
+        }
+
+        .scenario-btn.active {
+            background: rgba(251, 191, 36, 0.1);
+            border-color: #fbbf24;
+            color: #fbbf24;
+        }
+
+        .scenario-desc {
+            margin-top: 24px;
+            padding: 16px;
+            background: #1a1a24;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: #a1a1aa;
+            line-height: 1.5;
+            min-height: 120px;
+        }
+
+        .scenario-desc strong {
+            color: #e2e0d8;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        /* Action Buttons specific to scenarios */
+        #action-container {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            background: #2a2a3a;
+            color: #d4d0c8;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            cursor: pointer;
+        }
+
+        .action-btn:hover {
+            background: #fbbf24;
+            color: #0a0a0f;
+        }
+
+        /* Main Canvas Area */
+        #viewport {
+            flex-grow: 1;
+            position: relative;
+            background: #0a0a0f;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .overlay-hint {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #fbbf24;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <header>
+        <h1>lite-camera-pro</h1>
+        <p>Interactive Cookbook Tour</p>
+    </header>
+
+    <div class="scenario-list" id="scenario-list">
+    </div>
+
+    <div class="scenario-desc" id="scenario-desc">
+    </div>
+</div>
+
+<div id="viewport">
+    <canvas id="gameCanvas"></canvas>
+    <div class="overlay-hint">WASD to move</div>
+</div>
+
+<script type="module">
+    import {CinematicCameraPro, FollowMode, BoundsType} from './index.js';
+
+    // ─────────────────────────────────────────────────────────
+    //  ENGINE SETUP
+    // ─────────────────────────────────────────────────────────
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Resize handler
+    function resize() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    const WORLD_W = 3200;
+    const WORLD_H = 2400;
+
+    // The Pro Camera
+    const cam = new CinematicCameraPro(canvas.width, canvas.height, WORLD_W, WORLD_H);
+    // Show debug HUD by default
+    cam.debugConfig.show.shake = true;
+    cam.debugConfig.show.bounds = true;
+
+    // Game State
+    const player = {x: 400, y: 400, vx: 0, vy: 0, speed: 300, size: 16};
+    const boss = {x: 1800, y: 1200, size: 32};
+    const ally = {x: 500, y: 500, vx: 1, vy: 1, size: 14, active: false};
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+    // ─────────────────────────────────────────────────────────
+    //  SCENARIO DEFINITIONS (The Cookbook Tour)
+    // ─────────────────────────────────────────────────────────
+
+    const scenarios = [
+        {
+            id: 'smooth',
+            title: '02 — Smooth Follow',
+            desc: '<strong>The Default Glide</strong><br>The camera uses a deadzone and lookahead to smoothly follow the player. Notice how small movements don\'t jerk the camera around.',
+            setup: () => {
+                cam.setMode(FollowMode.SMOOTH);
+                cam.deadzoneX = 60;
+                cam.deadzoneY = 40;
+                cam.lookaheadDist = 80;
+                cam.setZoom(1.0, 0.5);
+                cam.clearBoundsRect();
+                cam.setBoundsType(BoundsType.HARD);
+            },
+            teardown: () => {
+            }
+        },
+        {
+            id: 'lock',
+            title: '04 — Twin-Stick Lock',
+            desc: '<strong>Zero Lag Precision</strong><br>The camera locks instantly to the player. No smoothing, no deadzone. Perfect for top-down shooters where aim is critical.<br><br><em>Click anywhere to fire and see directional recoil.</em>',
+            setup: () => {
+                cam.setMode(FollowMode.LOCK);
+                cam.setZoom(1.2, 0.5);
+            },
+            teardown: () => {
+            },
+            onClick: (worldX, worldY) => {
+                // Calculate direction from player to click
+                const dx = player.x - worldX;
+                const dy = player.y - worldY;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                // Apply directional recoil in the OPPOSITE direction of the shot
+                cam.shake({trauma: 0.5, freq: 25, decay: 3, maxOffset: 15, dirX: dx / len, dirY: dy / len});
+            }
+        },
+        {
+            id: 'hybrid',
+            title: '03 — Platformer Hybrid',
+            desc: '<strong>Solid Vertical, Smooth Horizontal</strong><br>Horizontal movement is smoothed, but vertical movement locks tightly to the player. Prevents the camera from "swimming" during jumps.',
+            setup: () => {
+                cam.setMode(FollowMode.HYBRID);
+                cam.hybridVerticalSnap = true;
+                cam.deadzoneX = 80;
+                cam.setZoom(1.0, 0.5);
+            },
+            teardown: () => {
+            }
+        },
+        {
+            id: 'bounds',
+            title: '16 — Soft Edge Bounds',
+            desc: '<strong>Graceful Deceleration</strong><br>Walk to the edge of the world. Instead of hitting a brick wall, the camera smoothly decelerates using a custom soft zone.',
+            setup: () => {
+                cam.setMode(FollowMode.SMOOTH);
+                cam.setBoundsType(BoundsType.SOFT);
+                cam._bounds.softZone = 150; // 150px gradient at world edges
+                cam.setZoom(0.8, 0.5);
+            },
+            teardown: () => {
+                cam.setBoundsType(BoundsType.HARD);
+            }
+        },
+        {
+            id: 'parallax',
+            title: '19 — Deep Parallax',
+            desc: '<strong>Instant Depth</strong><br>We\'ve registered 3 parallax layers (sky, mountains, foreground). Move around to see them scroll at different multipliers relative to the camera.',
+            setup: () => {
+                cam.setMode(FollowMode.SMOOTH);
+                cam.addParallaxLayer('sky', 0.05);
+                cam.addParallaxLayer('mountains', 0.2);
+                cam.addParallaxLayer('foreground', 1.4);
+            },
+            teardown: () => {
+                cam.removeParallaxLayer('sky');
+                cam.removeParallaxLayer('mountains');
+                cam.removeParallaxLayer('foreground');
+            }
+        },
+        {
+            id: 'multitarget',
+            title: '15 — Co-op Framing',
+            desc: '<strong>Auto-Zoom Bounding Box</strong><br>An ally has spawned. The camera abandons follow mode and automatically manages position and zoom to keep both targets perfectly framed.',
+            setup: () => {
+                ally.active = true;
+                ally.x = player.x + 100;
+                ally.y = player.y + 100;
+                cam.trackMultiple([player, ally], {padding: 150, minZoom: 0.5, maxZoom: 1.5});
+            },
+            teardown: () => {
+                ally.active = false;
+                cam.trackSingle();
+                cam.setZoom(1.0, 0.5);
+            }
+        },
+        {
+            id: 'sequence',
+            title: '12 — Boss Reveal Sequence',
+            desc: '<strong>Cinematic Timeline Control</strong><br>Click the button below to hand control over to a pre-choreographed timeline sequence. It pans, zooms, shakes, and returns.',
+            setup: () => {
+                cam.setMode(FollowMode.SMOOTH);
+                renderActions([
+                    {
+                        label: 'Play Reveal', action: () => {
+                            const seq = cam.createSequence()
+                                .moveAndZoom(boss.x, boss.y, 1.8, 1200)
+                                .shake('heavy_impact')
+                                .wait(800)
+                                .moveAndZoom(player.x, player.y, 1.0, 1000);
+                            cam.playSequence(seq);
+                        }
+                    }
+                ]);
+            },
+            teardown: () => {
+                cam.stopSequence();
+            }
+        }
+    ];
+
+    let currentScenarioIndex = -1;
+
+    // ─────────────────────────────────────────────────────────
+    //  UI CONTROLLER
+    // ─────────────────────────────────────────────────────────
+
+    const listEl = document.getElementById('scenario-list');
+    const descEl = document.getElementById('scenario-desc');
+
+    function loadScenario(index) {
+        if (currentScenarioIndex >= 0) {
+            scenarios[currentScenarioIndex].teardown();
+        }
+
+        currentScenarioIndex = index;
+        const s = scenarios[index];
+
+        // Update UI
+        document.querySelectorAll('.scenario-btn').forEach((btn, i) => {
+            btn.classList.toggle('active', i === index);
+        });
+
+        descEl.innerHTML = s.desc + '<div id="action-container"></div>';
+
+        // Run setup
+        s.setup();
+    }
+
+    function renderActions(actions) {
+        const container = document.getElementById('action-container');
+        if (!container) return;
+        actions.forEach(a => {
+            const btn = document.createElement('button');
+            btn.className = 'action-btn';
+            btn.innerText = a.label;
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                a.action();
+            };
+            container.appendChild(btn);
+        });
+    }
+
+    // Build sidebar
+    scenarios.forEach((s, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'scenario-btn';
+        btn.innerText = s.title;
+        btn.onclick = () => loadScenario(i);
+        listEl.appendChild(btn);
+    });
+
+    // Handle Clicks
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const pt = cam.screenToWorld(e.clientX - rect.left, e.clientY - rect.top, {x: 0, y: 0});
+
+        const s = scenarios[currentScenarioIndex];
+        if (s.onClick) s.onClick(pt.x, pt.y);
+    });
+
+    // ─────────────────────────────────────────────────────────
+    //  RENDERING & GAME LOOP
+    // ─────────────────────────────────────────────────────────
+
+    // Dummy landmarks for visual reference
+    const landmarks = Array.from({length: 40}, (_, i) => ({
+        x: 100 + (Math.sin(i * 123) * 0.5 + 0.5) * (WORLD_W - 200),
+        y: 100 + (Math.cos(i * 321) * 0.5 + 0.5) * (WORLD_H - 200),
+        r: 15 + (i % 3) * 10
+    }));
+
+    function drawWorld() {
+        // Base grid
+        ctx.fillStyle = '#13131d';
+        ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= WORLD_W; x += 100) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, WORLD_H);
+            ctx.stroke();
+        }
+        for (let y = 0; y <= WORLD_H; y += 100) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(WORLD_W, y);
+            ctx.stroke();
+        }
+
+        // World Bounds
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+
+        // Landmarks
+        ctx.fillStyle = 'rgba(167, 139, 250, 0.2)';
+        ctx.strokeStyle = 'rgba(167, 139, 250, 0.5)';
+        landmarks.forEach(l => {
+            ctx.beginPath();
+            ctx.arc(l.x, l.y, l.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        });
+
+        // Boss
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(boss.x, boss.y, boss.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px monospace';
+        ctx.fillText('BOSS', boss.x - 14, boss.y - boss.size - 8);
+
+        // Ally
+        if (ally.active) {
+            ctx.fillStyle = '#34d399';
+            ctx.beginPath();
+            ctx.arc(ally.x, ally.y, ally.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Player
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(player.x - player.size, player.y - player.size, player.size * 2, player.size * 2);
+    }
+
+    function drawParallaxLayer(color, size, count, offsetSeed) {
+        ctx.fillStyle = color;
+        for (let i = 0; i < count; i++) {
+            const x = (Math.sin(i * offsetSeed) * 0.5 + 0.5) * WORLD_W;
+            const y = (Math.cos(i * offsetSeed) * 0.5 + 0.5) * WORLD_H;
+            ctx.fillRect(x, y, size, size);
+        }
+    }
+
+    let lastTime = performance.now();
+
+    function loop(now) {
+        const dt = Math.min((now - lastTime) / 1000, 0.05);
+        lastTime = now;
+
+        // Player Input
+        player.vx = 0;
+        player.vy = 0;
+        if (keys['w'] || keys['arrowup']) player.vy = -1;
+        if (keys['s'] || keys['arrowdown']) player.vy = 1;
+        if (keys['a'] || keys['arrowleft']) player.vx = -1;
+        if (keys['d'] || keys['arrowright']) player.vx = 1;
+
+        const len = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+        if (len > 0) {
+            player.vx /= len;
+            player.vy /= len;
+        }
+
+        player.x += player.vx * player.speed * dt;
+        player.y += player.vy * player.speed * dt;
+
+        // Clamp player to world
+        player.x = Math.max(player.size, Math.min(WORLD_W - player.size, player.x));
+        player.y = Math.max(player.size, Math.min(WORLD_H - player.size, player.y));
+
+        // Ally wander logic
+        if (ally.active) {
+            ally.x += ally.vx * 150 * dt;
+            ally.y += ally.vy * 150 * dt;
+            if (ally.x < 100 || ally.x > WORLD_W - 100) ally.vx *= -1;
+            if (ally.y < 100 || ally.y > WORLD_H - 100) ally.vy *= -1;
+        }
+
+        // 1. Update Camera
+        // Ensure viewport size is accurate in case of resize
+        cam.viewW = canvas.width;
+        cam.viewH = canvas.height;
+        cam.update(dt, player.x, player.y, player.vx * player.speed, player.vy * player.speed);
+
+        // 2. Render Setup
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Render Parallax Layers (if active)
+        if (cam._parallax.activeCount > 0) {
+            ctx.save();
+            cam.applyParallax('sky', ctx);
+            drawParallaxLayer('rgba(255,255,255,0.05)', 4, 100, 1.1);
+            ctx.restore();
+            ctx.save();
+            cam.applyParallax('mountains', ctx);
+            drawParallaxLayer('rgba(167,139,250,0.1)', 40, 20, 2.2);
+            ctx.restore();
+        }
+
+        // Render Main World
+        ctx.save();
+        cam.apply(ctx);
+        drawWorld();
+        cam.debug(ctx); // World-space debug info
+        ctx.restore();
+
+        // Render Foreground Parallax
+        if (cam._parallax.activeCount > 0) {
+            ctx.save();
+            cam.applyParallax('foreground', ctx);
+            drawParallaxLayer('rgba(52,211,153,0.15)', 80, 15, 3.3);
+            ctx.restore();
+        }
+
+        // 3. Render HUD
+        cam.debugHUD(ctx);
+
+        requestAnimationFrame(loop);
+    }
+
+    // Start Tour
+    loadScenario(0);
+    requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>

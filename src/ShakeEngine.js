@@ -129,11 +129,24 @@ function acquireSlot(state) {
  * @param {number} [profile.intensity=1] Scale multiplier for the profile
  */
 export function addShake(state, profile, intensity = 1) {
+    // CP-14 + H-F (fail closed): validate trauma/intensity in this COLD entry so
+    // the per-frame updateShake/computeShake loops gain zero new branches.
+    //   - trauma undefined -> 0.5 (documented default)
+    //   - trauma or intensity non-finite (NaN/Inf) -> activate NOTHING, return
+    //     early. The old `profile.trauma || 0.5` laundered NaN to 0.5, opening a
+    //     poison door: a single NaN shake would drive every later frame to NaN.
+    //     null is not zero; an unverified number does not get a default.
+    //   - resulting trauma <= 0 -> inert (a zero-trauma shake fires nothing).
+    const rawTrauma = profile.trauma === undefined ? 0.5 : profile.trauma;
+    if (!Number.isFinite(rawTrauma) || !Number.isFinite(intensity)) return;
+    const trauma = Math.min(1, rawTrauma * intensity);
+    if (trauma <= 0) return;
+
     const slot = acquireSlot(state);
 
     slot.active = true;
     slot.isDefault = false;
-    slot.trauma = Math.min(1, (profile.trauma || 0.5) * intensity);
+    slot.trauma = trauma;
     slot.decay = profile.decay !== undefined ? profile.decay : 1.0;
     slot.freq = profile.freq !== undefined ? profile.freq : 15;
     slot.maxOffset = profile.maxOffset !== undefined ? profile.maxOffset : 15;
@@ -166,6 +179,11 @@ export function addShake(state, profile, intensity = 1) {
  * @param {number} amount Trauma to add [0, 1]
  */
 export function addTraumaSimple(state, amount) {
+    // CP-14 + H-F (fail closed): a non-finite amount activates NOTHING and an
+    // amount <= 0 is inert. Same policy as addShake, in this cold entry only so
+    // the hot per-frame loops stay branch-for-branch unchanged.
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
     // Try to find an existing default omni slot to stack onto.
     // Preset/profile slots are NEVER stacked onto — they have parameters
     // (freq, decay, etc.) that addTrauma's generic shake wouldn't match.

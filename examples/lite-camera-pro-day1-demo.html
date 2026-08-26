@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lite-camera-pro · Day 1 — Zoom System</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;800&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0a0f;
+            color: #e2e0d8;
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 28px 0 12px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #fbbf24;
+            margin-bottom: 4px;
+        }
+
+        header p {
+            font-size: 0.78rem;
+            color: #6b7280;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        #wrap {
+            position: relative;
+            border: 1px solid #1e1e2a;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(251, 191, 36, 0.04);
+        }
+
+        canvas {
+            display: block;
+            background: #111118;
+            cursor: crosshair;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+            justify-content: center;
+            padding: 0 12px;
+        }
+
+        .controls button {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            padding: 7px 14px;
+            background: #1a1a24;
+            color: #d4d0c8;
+            border: 1px solid #2a2a3a;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .controls button:hover {
+            background: #fbbf24;
+            color: #0a0a0f;
+            border-color: #fbbf24;
+        }
+
+        .hint {
+            margin-top: 10px;
+            font-size: 0.68rem;
+            color: #4b5563;
+            font-family: 'JetBrains Mono', monospace;
+            text-align: center;
+            padding-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>lite-camera-pro</h1>
+    <p>day 1 — zoom system verification</p>
+</header>
+
+<div id="wrap">
+    <canvas id="c"></canvas>
+</div>
+
+<div class="controls">
+    <button onclick="zoomIn()">zoom 2× (0.5s)</button>
+    <button onclick="zoomOut()">zoom 0.5× (0.5s)</button>
+    <button onclick="resetZoom()">zoom 1×</button>
+    <button onclick="shakeIt()">shake</button>
+</div>
+<p class="hint">WASD to move · click world to zoom-at-point · scroll to zoom</p>
+
+<script>
+    // ═══════════════════════════════════════════════════════════
+    //  INLINED DEPENDENCIES (for standalone demo only)
+    //  In production these come from @zakkster/lite-*
+    // ═══════════════════════════════════════════════════════════
+
+    // ── lite-lerp ──
+    const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+    const lerp  = (a, b, t) => a + (b - a) * t;
+
+    // ── lite-ease (subset) ──
+    const easeOutExpo = (t) => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    const easeInOutCubic = (t) => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)*0.5;
+
+    // ── lite-random ──
+    class Random {
+        constructor(seed = 42) { this.seed = seed; this._state = seed; }
+        next() {
+            let t = this._state += 0x6D2B79F5;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        }
+        reset(seed) { if (seed !== undefined) this.seed = seed; this._state = this.seed; }
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    //  CinematicCameraPro — Day 1 (zoom system)
+    // ═══════════════════════════════════════════════════════════
+
+    class CinematicCameraPro {
+
+        constructor(viewW, viewH, worldW, worldH, seed = 42) {
+            this.viewW  = viewW;
+            this.viewH  = viewH;
+            this.worldW = worldW;
+            this.worldH = worldH;
+
+            this.pos    = new Float32Array(2);
+            this.target = new Float32Array(2);
+            this.look   = new Float32Array(2);
+
+            this.deadzoneX     = 40;
+            this.deadzoneY     = 40;
+            this.lookaheadDist = 80;
+            this.lookaheadSpeed = 8.0;
+            this.lerpSpeed     = 5.0;
+
+            this.shakeTrauma    = 0;
+            this.shakeMaxOffset = 15;
+            this.shakeMaxAngle  = 0.05;
+            this.rng = new Random(seed);
+
+            this._maxX  = worldW - viewW;
+            this._maxY  = worldH - viewH;
+            this._halfW = viewW * 0.5;
+            this._halfH = viewH * 0.5;
+
+            // ── Zoom ──
+            this.zoom    = 1.0;
+            this.minZoom = 0.25;
+            this.maxZoom = 4.0;
+
+            this._zoomFrom    = 1.0;
+            this._zoomTo      = 1.0;
+            this._zoomDur     = 0;
+            this._zoomElapsed = 0;
+            this._zoomEase    = null;
+
+            this._zoomAnchorX = 0;
+            this._zoomAnchorY = 0;
+            this._hasAnchor   = false;
+        }
+
+        addTrauma(amount) {
+            this.shakeTrauma = Math.min(1.0, this.shakeTrauma + amount);
+        }
+
+        setZoom(level, duration = 0, ease = null) {
+            level = clamp(level, this.minZoom, this.maxZoom);
+            if (duration <= 0) {
+                this.zoom = level;
+                this._zoomDur = 0;
+                this._hasAnchor = false;
+                this._updateBoundsForZoom();
+                return this;
+            }
+            this._zoomFrom    = this.zoom;
+            this._zoomTo      = level;
+            this._zoomDur     = duration;
+            this._zoomElapsed = 0;
+            this._zoomEase    = ease;
+            this._hasAnchor   = false;
+            return this;
+        }
+
+        zoomAt(worldX, worldY, level, duration = 0, ease = null) {
+            this._zoomAnchorX = worldX;
+            this._zoomAnchorY = worldY;
+            this._hasAnchor = true;
+
+            level = clamp(level, this.minZoom, this.maxZoom);
+            if (duration <= 0) {
+                const prev = this.zoom;
+                this.zoom = level;
+                this._zoomDur = 0;
+                this._adjustForAnchor(prev, this.zoom);
+                this._hasAnchor = false;
+                this._updateBoundsForZoom();
+                return this;
+            }
+            this._zoomFrom    = this.zoom;
+            this._zoomTo      = level;
+            this._zoomDur     = duration;
+            this._zoomElapsed = 0;
+            this._zoomEase    = ease;
+            return this;
+        }
+
+        screenToWorld(sx, sy) {
+            return {
+                x: this.pos[0] + sx / this.zoom,
+                y: this.pos[1] + sy / this.zoom,
+            };
+        }
+
+        worldToScreen(wx, wy) {
+            return {
+                x: (wx - this.pos[0]) * this.zoom,
+                y: (wy - this.pos[1]) * this.zoom,
+            };
+        }
+
+        _updateBoundsForZoom() {
+            const visW = this.viewW / this.zoom;
+            const visH = this.viewH / this.zoom;
+            this._maxX = this.worldW - visW;
+            this._maxY = this.worldH - visH;
+            if (this._maxX < 0) this._maxX = 0;
+            if (this._maxY < 0) this._maxY = 0;
+        }
+
+        _adjustForAnchor(oldZoom, newZoom) {
+            if (!this._hasAnchor || newZoom === 0) return;
+            const ratio = oldZoom / newZoom;
+            const newX = this._zoomAnchorX - (this._zoomAnchorX - this.pos[0]) * ratio;
+            const newY = this._zoomAnchorY - (this._zoomAnchorY - this.pos[1]) * ratio;
+            this.pos[0] = newX;  this.pos[1] = newY;
+            this.target[0] = newX;  this.target[1] = newY;
+        }
+
+        update(dt, px, py, pvx = 0, pvy = 0) {
+            // Zoom animation
+            const prevZoom = this.zoom;
+            if (this._zoomDur > 0) {
+                this._zoomElapsed += dt;
+                let t = clamp(this._zoomElapsed / this._zoomDur, 0, 1);
+                if (this._zoomEase) t = this._zoomEase(t);
+                this.zoom = lerp(this._zoomFrom, this._zoomTo, t);
+                if (this._zoomElapsed >= this._zoomDur) {
+                    this.zoom = this._zoomTo;
+                    this._zoomDur = 0;
+                }
+            }
+
+            if (this._hasAnchor && prevZoom !== this.zoom) {
+                this._adjustForAnchor(prevZoom, this.zoom);
+            }
+            if (this._zoomDur <= 0) this._hasAnchor = false;
+
+            this._updateBoundsForZoom();
+
+            // Lookahead
+            const len = Math.sqrt(pvx * pvx + pvy * pvy);
+            const targetLx = len > 0 ? (pvx / len) * this.lookaheadDist : 0;
+            const targetLy = len > 0 ? (pvy / len) * this.lookaheadDist : 0;
+            this.look[0] += (targetLx - this.look[0]) * this.lookaheadSpeed * dt;
+            this.look[1] += (targetLy - this.look[1]) * this.lookaheadSpeed * dt;
+
+            // Follow with zoom-corrected centering
+            const halfVisW = this._halfW / this.zoom;
+            const halfVisH = this._halfH / this.zoom;
+            const desiredX = px + this.look[0] - halfVisW;
+            const desiredY = py + this.look[1] - halfVisH;
+
+            if (desiredX < this.target[0] - this.deadzoneX)
+                this.target[0] = desiredX + this.deadzoneX;
+            else if (desiredX > this.target[0] + this.deadzoneX)
+                this.target[0] = desiredX - this.deadzoneX;
+
+            if (desiredY < this.target[1] - this.deadzoneY)
+                this.target[1] = desiredY + this.deadzoneY;
+            else if (desiredY > this.target[1] + this.deadzoneY)
+                this.target[1] = desiredY - this.deadzoneY;
+
+            this.target[0] = this.target[0] < 0 ? 0 : (this.target[0] > this._maxX ? this._maxX : this.target[0]);
+            this.target[1] = this.target[1] < 0 ? 0 : (this.target[1] > this._maxY ? this._maxY : this.target[1]);
+
+            this.pos[0] += (this.target[0] - this.pos[0]) * this.lerpSpeed * dt;
+            this.pos[1] += (this.target[1] - this.pos[1]) * this.lerpSpeed * dt;
+
+            if (this.shakeTrauma > 0) {
+                this.shakeTrauma = Math.max(0, this.shakeTrauma - dt);
+            }
+        }
+
+        apply(ctx) {
+            let offsetX = 0, offsetY = 0, angle = 0;
+            if (this.shakeTrauma > 0) {
+                const shake = this.shakeTrauma * this.shakeTrauma;
+                offsetX = Math.fround(this.shakeMaxOffset * shake * (this.rng.next() * 2 - 1));
+                offsetY = Math.fround(this.shakeMaxOffset * shake * (this.rng.next() * 2 - 1));
+                angle   = Math.fround(this.shakeMaxAngle * shake * (this.rng.next() * 2 - 1));
+            }
+            ctx.translate(offsetX, offsetY);
+            ctx.translate(this._halfW, this._halfH);
+            ctx.rotate(angle);
+            ctx.scale(this.zoom, this.zoom);
+            ctx.translate(-this._halfW / this.zoom, -this._halfH / this.zoom);
+            ctx.translate(-(this.pos[0] | 0), -(this.pos[1] | 0));
+        }
+
+        debug(ctx) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+            ctx.lineWidth = 1;
+            const dx = this.target[0] - this.pos[0] + this._halfW / this.zoom;
+            const dy = this.target[1] - this.pos[1] + this._halfH / this.zoom;
+            ctx.strokeRect(dx - this.deadzoneX, dy - this.deadzoneY, this.deadzoneX * 2, this.deadzoneY * 2);
+            ctx.beginPath();
+            ctx.moveTo(dx - 5, dy); ctx.lineTo(dx + 5, dy);
+            ctx.moveTo(dx, dy - 5); ctx.lineTo(dx, dy + 5);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        debugHUD(ctx) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(4, 4, 200, 68);
+            ctx.font = '11px "JetBrains Mono", monospace';
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText(`zoom: ${this.zoom.toFixed(2)}`, 10, 18);
+            ctx.fillText(`pos: ${this.pos[0].toFixed(1)}, ${this.pos[1].toFixed(1)}`, 10, 32);
+            ctx.fillText(`vis: ${(this.viewW / this.zoom).toFixed(0)} × ${(this.viewH / this.zoom).toFixed(0)}`, 10, 46);
+            if (this.shakeTrauma > 0) {
+                ctx.fillStyle = '#ef4444';
+                ctx.fillText(`trauma: ${this.shakeTrauma.toFixed(2)}`, 10, 60);
+            }
+            ctx.fillStyle = '#6b7280';
+            ctx.fillText(`bounds: ${this._maxX.toFixed(0)} × ${this._maxY.toFixed(0)}`, 10, 60 + (this.shakeTrauma > 0 ? 14 : 0));
+            ctx.restore();
+        }
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    //  DEMO SCENE
+    // ═══════════════════════════════════════════════════════════
+
+    const CANVAS_W = Math.min(800, window.innerWidth - 24);
+    const CANVAS_H = 480;
+    const WORLD_W  = 2400;
+    const WORLD_H  = 1600;
+
+    const canvas = document.getElementById('c');
+    canvas.width  = CANVAS_W;
+    canvas.height = CANVAS_H;
+    document.getElementById('wrap').style.width = CANVAS_W + 'px';
+
+    const ctx = canvas.getContext('2d');
+    const cam = new CinematicCameraPro(CANVAS_W, CANVAS_H, WORLD_W, WORLD_H);
+
+    // ── Player ──
+    const player = { x: 400, y: 400, vx: 0, vy: 0, speed: 280, size: 16 };
+    const keys = {};
+
+    window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup',   (e) => { keys[e.key.toLowerCase()] = false; });
+
+    // ── Click to zoom-at-point ──
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const world = cam.screenToWorld(sx, sy);
+
+        // Toggle: if zoomed in, zoom out. Otherwise zoom in.
+        const targetZoom = cam.zoom > 1.3 ? 1.0 : 2.0;
+        cam.zoomAt(world.x, world.y, targetZoom, 0.6, easeOutExpo);
+    });
+
+    // ── Scroll to zoom ──
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.15 : 0.15;
+        cam.setZoom(cam.zoom + delta, 0.2, easeOutCubic);
+    }, { passive: false });
+
+    // ── Button handlers ──
+    window.zoomIn    = () => cam.setZoom(2.0, 0.5, easeOutExpo);
+    window.zoomOut   = () => cam.setZoom(0.5, 0.5, easeOutExpo);
+    window.resetZoom = () => cam.setZoom(1.0, 0.3, easeInOutCubic);
+    window.shakeIt   = () => cam.addTrauma(0.6);
+
+    // ── World decoration (grid + landmarks) ──
+    const landmarks = [];
+    const rng = new Random(99);
+    for (let i = 0; i < 30; i++) {
+        landmarks.push({
+            x: 60 + rng.next() * (WORLD_W - 120),
+            y: 60 + rng.next() * (WORLD_H - 120),
+            r: 10 + rng.next() * 30,
+            hue: (rng.next() * 360) | 0,
+        });
+    }
+
+    function drawWorld() {
+        // Background
+        ctx.fillStyle = '#13131d';
+        ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+        // Grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= WORLD_W; x += 100) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_H); ctx.stroke();
+        }
+        for (let y = 0; y <= WORLD_H; y += 100) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD_W, y); ctx.stroke();
+        }
+
+        // World boundary
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+
+        // Landmarks
+        for (const lm of landmarks) {
+            ctx.fillStyle = `hsla(${lm.hue}, 60%, 45%, 0.35)`;
+            ctx.beginPath();
+            ctx.arc(lm.x, lm.y, lm.r, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = `hsla(${lm.hue}, 70%, 55%, 0.5)`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // Axis labels every 400px
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.font = '10px monospace';
+        for (let x = 0; x <= WORLD_W; x += 400) {
+            for (let y = 0; y <= WORLD_H; y += 400) {
+                ctx.fillText(`${x},${y}`, x + 4, y + 12);
+            }
+        }
+    }
+
+    function drawPlayer() {
+        const s = player.size;
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(player.x - s, player.y - s, s * 2, s * 2);
+
+        // Direction indicator
+        const len = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+        if (len > 0) {
+            const nx = player.vx / len, ny = player.vy / len;
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(player.x + nx * 30, player.y + ny * 30);
+            ctx.stroke();
+        }
+    }
+
+    // ── Game loop ──
+    let lastTime = performance.now();
+
+    function loop(now) {
+        const dt = Math.min((now - lastTime) / 1000, 0.05); // cap at 50ms
+        lastTime = now;
+
+        // Input
+        player.vx = 0; player.vy = 0;
+        if (keys['w'] || keys['arrowup'])    player.vy = -1;
+        if (keys['s'] || keys['arrowdown'])  player.vy =  1;
+        if (keys['a'] || keys['arrowleft'])  player.vx = -1;
+        if (keys['d'] || keys['arrowright']) player.vx =  1;
+
+        // Normalize diagonal
+        const ilen = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+        if (ilen > 0) { player.vx /= ilen; player.vy /= ilen; }
+
+        player.x += player.vx * player.speed * dt;
+        player.y += player.vy * player.speed * dt;
+
+        // Keep player in world
+        player.x = clamp(player.x, player.size, WORLD_W - player.size);
+        player.y = clamp(player.y, player.size, WORLD_H - player.size);
+
+        // Camera
+        cam.update(dt, player.x, player.y, player.vx * player.speed, player.vy * player.speed);
+
+        // ── Render ──
+        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+        ctx.save();
+        cam.apply(ctx);
+
+        drawWorld();
+        drawPlayer();
+        cam.debug(ctx);
+
+        ctx.restore();
+
+        // HUD (screen space)
+        cam.debugHUD(ctx);
+
+        requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+</script>
+</body>
+</html>

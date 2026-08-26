@@ -46,6 +46,16 @@ import {
 } from './BoundsSystem.js';
 import {createDebugHUDConfig, drawDebugHUD, drawDebugWorld} from './DebugHUD.js';
 
+// Cold-path sentinel: after destroy() every method that reads nulled internal
+// state is rebound to this so a use-after-destroy fails closed with a named
+// error instead of a raw null deref. Rebinding (not an in-body guard) keeps
+// update()/apply() at zero per-frame cost. Matches base CinematicCamera (CP-8).
+const _dead = () => {
+    const e = new Error("CinematicCameraPro: use after destroy()");
+    e.code = "ERR_CAMERA_DESTROYED";
+    throw e;
+};
+
 export class CinematicCameraPro extends CinematicCamera {
 
     /**
@@ -798,8 +808,10 @@ export class CinematicCameraPro extends CinematicCamera {
         ctx.scale(this.zoom, this.zoom);
         ctx.translate(-this._halfW / this.zoom, -this._halfH / this.zoom);
 
-        // 6. Scroll to camera world position
-        ctx.translate(-(this.pos[0] | 0), -(this.pos[1] | 0));
+        // 6. Scroll to camera world position.
+        // int snap is deliberate: kills texture shimmer. floor (not | 0) so the
+        // snap is uniform about the origin -- | 0 truncates toward zero (CP-13).
+        ctx.translate(-Math.floor(this.pos[0]), -Math.floor(this.pos[1]));
     }
 
     // ─────────────────────────────────────────────────────
@@ -868,9 +880,10 @@ export class CinematicCameraPro extends CinematicCamera {
     }
 
     /**
-     * Destroy the camera. Releases sequences, clears shake state, and
-     * nulls all nested allocations so the GC can reclaim them. After
-     * destroy(), the camera is unusable — do not call any further methods.
+     * Destroy the camera. Releases sequences, clears shake state, and nulls all
+     * nested allocations so the GC can reclaim them. After destroy() the camera
+     * is unusable: EVERY public method throws an Error with code
+     * "ERR_CAMERA_DESTROYED" (fail closed) rather than a raw null deref.
      */
     destroy() {
         if (this._seq) {
@@ -878,16 +891,37 @@ export class CinematicCameraPro extends CinematicCamera {
             this._seq = null;
         }
 
+        // clearShakeState needs _shake still live -- run it before the null.
         clearShakeState(this._shake);
 
-        // Release nested state so the slot pools / layer arrays can be GC'd
+        // Release nested Pro state so the slot pools / layer arrays can be GC'd.
         this._shake = null;
         this._mt = null;
         this._parallax = null;
         this._bounds = null;
         this.debugConfig = null;
-        this.pos = this.target = this.look = null;
-        this.rng = null;
+
+        // Null the base typed arrays + rng and rebind the base methods
+        // (update/apply/debug/addTrauma/resize/destroy) to the base sentinel.
+        // Ordered after the Pro teardown so nothing above reads a nulled base
+        // field. T8 asserts parity with the base's destroy contract.
+        super.destroy();
+
+        // CP-8: a destroyed camera fails closed on EVERY public method. Any call
+        // throws ERR_CAMERA_DESTROYED (Pro's sentinel -- consistent message)
+        // instead of a raw null deref. Rebinding the WHOLE public surface, not a
+        // curated subset, means the guarantee cannot silently drift as methods
+        // are added -- and re-stamps the base rebinds from super.destroy() with
+        // Pro's message for parity. Getters (sequencePlaying) are already
+        // null-safe. A double destroy() throws the same named error.
+        this.update = this.apply = this.debug = this.debugHUD =
+            this.addTrauma = this.shake = this.shakePreset = this.clearShakes =
+            this.setMode = this.trackMultiple = this.trackSingle = this.setTargetCount =
+            this.createSequence = this.playSequence = this.stopSequence =
+            this.addParallaxLayer = this.removeParallaxLayer = this.applyParallax =
+            this.setBoundsType = this.setBoundsEdges = this.setBoundsRect = this.clearBoundsRect =
+            this.setZoom = this.zoomAt = this.screenToWorld = this.worldToScreen =
+            this.getState = this.setState = this.resize = this.destroy = _dead;
     }
 }
 

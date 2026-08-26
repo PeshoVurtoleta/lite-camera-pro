@@ -191,7 +191,10 @@ export function applyParallaxLayer(state, id, ctx) {
     for (let i = 0; i < state.layerCount; i++) {
         const layer = state.layers[i];
         if (layer.active && layer.id === id) {
-            ctx.translate(-(layer.scrollX | 0), -(layer.scrollY | 0));
+            // int snap is deliberate: kills texture shimmer. floor (not | 0) so
+            // the snap is uniform about the origin -- | 0 truncates toward zero
+            // (CP-13), matching the base camera and CinematicCameraPro.apply().
+            ctx.translate(-Math.floor(layer.scrollX), -Math.floor(layer.scrollY));
             return true;
         }
     }

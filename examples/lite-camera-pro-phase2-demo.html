@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lite-camera-pro · Phase 2 — Shake System</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;800&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0a0f;color:#e2e0d8;font-family:'Outfit',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+  header{padding:24px 0 10px;text-align:center}
+  header h1{font-size:1.05rem;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#fbbf24;margin-bottom:2px}
+  header p{font-size:.72rem;color:#6b7280;font-family:'JetBrains Mono',monospace}
+  #wrap{position:relative;border:1px solid #1e1e2a;border-radius:6px;overflow:hidden;box-shadow:0 0 60px rgba(251,191,36,.04)}
+  canvas{display:block;background:#111118}
+  .controls{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap;justify-content:center;padding:0 10px;max-width:820px}
+  .controls button{font-family:'JetBrains Mono',monospace;font-size:.62rem;padding:5px 10px;background:#1a1a24;color:#d4d0c8;border:1px solid #2a2a3a;border-radius:4px;cursor:pointer;transition:all .15s}
+  .controls button:hover{background:#2a2a3a}
+  .controls button.red{border-color:#7f1d1d}.controls button.red:hover{background:#ef4444;color:#0a0a0f}
+  .controls button.yellow{border-color:#78350f}.controls button.yellow:hover{background:#fbbf24;color:#0a0a0f}
+  .controls button.purple{border-color:#4c1d95}.controls button.purple:hover{background:#a78bfa;color:#0a0a0f}
+  .controls button.green{border-color:#064e3b}.controls button.green:hover{background:#34d399;color:#0a0a0f}
+  .row-label{font-family:'JetBrains Mono',monospace;font-size:.55rem;color:#4b5563;padding-top:6px;width:100%;text-align:center;text-transform:uppercase;letter-spacing:.1em}
+  .hint{margin-top:8px;font-size:.6rem;color:#4b5563;font-family:'JetBrains Mono',monospace;text-align:center;padding-bottom:16px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <h1>lite-camera-pro</h1>
+  <p>phase 2 — noise-based shake system · 8 presets · layered shakes</p>
+</header>
+<div id="wrap"><canvas id="c"></canvas></div>
+
+<div class="controls">
+  <div class="row-label">presets (fire individually or stack them)</div>
+  <button class="red" onclick="fire('explosion')">explosion</button>
+  <button class="red" onclick="fire('earthquake')">earthquake</button>
+  <button class="red" onclick="fire('heavy_impact')">heavy impact</button>
+  <button class="yellow" onclick="fire('impact')">impact</button>
+  <button class="yellow" onclick="fire('damage')">damage</button>
+  <button class="yellow" onclick="fire('landing')">landing</button>
+  <button class="green" onclick="fire('recoil')">recoil ↑</button>
+  <button class="green" onclick="fire('rumble')">rumble</button>
+
+  <div class="row-label">custom directional</div>
+  <button class="purple" onclick="fireDir(1,0)">shake →</button>
+  <button class="purple" onclick="fireDir(-1,0)">shake ←</button>
+  <button class="purple" onclick="fireDir(0,-1)">shake ↑</button>
+  <button class="purple" onclick="fireDir(1,1)">shake ↘</button>
+
+  <div class="row-label">controls</div>
+  <button onclick="cam.addTrauma(0.3)">+trauma (compat)</button>
+  <button onclick="cam.addTrauma(0.6)">+big trauma</button>
+  <button onclick="cam.clearShakes()">clear all</button>
+  <button onclick="fireCombo()">combo (3 layers!)</button>
+</div>
+<p class="hint">WASD to move · try stacking multiple shakes at once · directional shakes push along one axis</p>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  INLINED DEPS
+// ═══════════════════════════════════════════════════
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+class Random{constructor(s=42){this.seed=s;this._state=s}next(){let t=this._state+=0x6D2B79F5;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296}}
+
+// ── lite-noise (simplex2 inlined for standalone demo) ──
+const _perm=new Uint8Array(512);
+const _grad3=new Float32Array([1,1,0,-1,1,0,1,-1,0,-1,-1,0,1,0,1,-1,0,1,1,0,-1,-1,0,-1,0,1,1,0,-1,1,0,1,-1,0,-1,-1]);
+(function seedNoise(seed){
+  const rng=new Random(seed);const p=new Uint8Array(256);
+  for(let i=0;i<256;i++)p[i]=i;
+  for(let i=255;i>0;i--){const j=(rng.next()*(i+1))|0;const tmp=p[i];p[i]=p[j];p[j]=tmp;}
+  for(let i=0;i<512;i++)_perm[i]=p[i&255];
+})(0);
+const F2=.5*(Math.sqrt(3)-1),G2=(3-Math.sqrt(3))/6;
+function dot2(gi,x,y){return _grad3[gi]*x+_grad3[gi+1]*y}
+function simplex2(x,y){
+  const s=(x+y)*F2,i=Math.floor(x+s),j=Math.floor(y+s),t=(i+j)*G2;
+  const X0=i-t,Y0=j-t,x0=x-X0,y0=y-Y0;
+  const i1=x0>y0?1:0,j1=x0>y0?0:1;
+  const x1=x0-i1+G2,y1=y0-j1+G2,x2=x0-1+2*G2,y2=y0-1+2*G2;
+  const ii=i&255,jj=j&255;
+  const gi0=(_perm[ii+_perm[jj]]%12)*3,gi1=(_perm[ii+i1+_perm[jj+j1]]%12)*3,gi2=(_perm[ii+1+_perm[jj+1]]%12)*3;
+  let n0=0,n1=0,n2=0;
+  let t0=.5-x0*x0-y0*y0;if(t0>0){t0*=t0;n0=t0*t0*dot2(gi0,x0,y0)}
+  let t1=.5-x1*x1-y1*y1;if(t1>0){t1*=t1;n1=t1*t1*dot2(gi1,x1,y1)}
+  let t2=.5-x2*x2-y2*y2;if(t2>0){t2*=t2;n2=t2*t2*dot2(gi2,x2,y2)}
+  return 70*(n0+n1+n2);
+}
+
+// ═══════════════════════════════════════════════════
+//  SHAKE ENGINE (Day 4)
+// ═══════════════════════════════════════════════════
+const MAX_SLOTS=8, NOISE_SEED=1000;
+function mkSlot(){return{active:false,trauma:0,decay:1,freq:15,time:0,maxOffset:15,maxAngle:.05,dirX:0,dirY:0,isDirectional:false}}
+function createShakeState(){const s=[];for(let i=0;i<MAX_SLOTS;i++)s.push(mkSlot());return{slots:s,slotCount:MAX_SLOTS,offsetX:0,offsetY:0,angle:0,globalScale:1,active:false}}
+function acquireSlot(st){let mt=Infinity,mi=0;for(let i=0;i<st.slotCount;i++){if(!st.slots[i].active)return st.slots[i];if(st.slots[i].trauma<mt){mt=st.slots[i].trauma;mi=i;}}return st.slots[mi]}
+function addShake(st,p,int=1){
+  const s=acquireSlot(st);s.active=true;s.trauma=Math.min(1,(p.trauma||.5)*int);
+  s.decay=p.decay!==undefined?p.decay:1;s.freq=p.freq!==undefined?p.freq:15;s.time=0;
+  s.maxOffset=p.maxOffset!==undefined?p.maxOffset:15;s.maxAngle=p.maxAngle!==undefined?p.maxAngle:.05;
+  const dx=p.dirX||0,dy=p.dirY||0;s.isDirectional=(dx!==0||dy!==0);
+  if(s.isDirectional){const l=Math.sqrt(dx*dx+dy*dy);s.dirX=dx/l;s.dirY=dy/l}else{s.dirX=0;s.dirY=0}
+  st.active=true;
+}
+function addTraumaSimple(st,amt){
+  for(let i=0;i<st.slotCount;i++){const s=st.slots[i];if(s.active&&!s.isDirectional){s.trauma=Math.min(1,s.trauma+amt);return;}}
+  addShake(st,{trauma:amt,freq:15,decay:1,maxOffset:15,maxAngle:.05});
+}
+function updateShake(st,dt){
+  let any=false;for(let i=0;i<st.slotCount;i++){const s=st.slots[i];if(!s.active)continue;s.time+=dt;s.trauma-=s.decay*dt;if(s.trauma<=0){s.trauma=0;s.active=false;continue;}any=true;}st.active=any;
+}
+function computeShake(st){
+  let tx=0,ty=0,ta=0;
+  for(let i=0;i<st.slotCount;i++){const s=st.slots[i];if(!s.active)continue;
+    const sh=s.trauma*s.trauma,t=s.time*s.freq,nb=NOISE_SEED*(i*3);
+    const nx=simplex2(t,nb),ny=simplex2(t,nb+1),na=simplex2(t,nb+2);
+    if(s.isDirectional){const m=s.maxOffset*sh*nx;tx+=m*s.dirX;ty+=m*s.dirY;}
+    else{tx+=s.maxOffset*sh*nx;ty+=s.maxOffset*sh*ny;}
+    ta+=s.maxAngle*sh*na;
+  }
+  st.offsetX=Math.fround(tx*st.globalScale);st.offsetY=Math.fround(ty*st.globalScale);st.angle=Math.fround(ta*st.globalScale);
+}
+function clearShakeState(st){for(let i=0;i<st.slotCount;i++){st.slots[i].active=false;st.slots[i].trauma=0;}st.active=false;st.offsetX=st.offsetY=st.angle=0;}
+
+// ═══════════════════════════════════════════════════
+//  SHAKE PRESETS (Day 5)
+// ═══════════════════════════════════════════════════
+const PRESETS={
+  explosion:{trauma:.8,freq:12,decay:.7,maxOffset:25,maxAngle:.06},
+  earthquake:{trauma:.5,freq:6,decay:.3,maxOffset:30,maxAngle:.02},
+  recoil:{trauma:.5,freq:20,decay:2.5,maxOffset:12,maxAngle:.02,dirX:0,dirY:-1},
+  impact:{trauma:.7,freq:25,decay:2,maxOffset:18,maxAngle:.04},
+  landing:{trauma:.4,freq:18,decay:1.5,maxOffset:10,maxAngle:.01,dirX:0,dirY:1},
+  damage:{trauma:.35,freq:22,decay:3,maxOffset:6,maxAngle:0},
+  rumble:{trauma:.2,freq:30,decay:.15,maxOffset:3,maxAngle:0},
+  heavy_impact:{trauma:1,freq:10,decay:.5,maxOffset:35,maxAngle:.08},
+};
+
+// ═══════════════════════════════════════════════════
+//  FOLLOW (smooth only for this demo)
+// ═══════════════════════════════════════════════════
+function fSmooth(cam,dt,px,py,pvx,pvy){
+  const len=Math.sqrt(pvx*pvx+pvy*pvy);
+  const tlx=len>0?(pvx/len)*cam.lookaheadDist:0,tly=len>0?(pvy/len)*cam.lookaheadDist:0;
+  cam.look[0]+=(tlx-cam.look[0])*cam.lookaheadSpeed*dt;cam.look[1]+=(tly-cam.look[1])*cam.lookaheadSpeed*dt;
+  const hvw=cam.visibleW*.5,hvh=cam.visibleH*.5;
+  const dx=px+cam.look[0]-hvw,dy=py+cam.look[1]-hvh;
+  if(dx<cam.target[0]-cam.deadzoneX)cam.target[0]=dx+cam.deadzoneX;
+  else if(dx>cam.target[0]+cam.deadzoneX)cam.target[0]=dx-cam.deadzoneX;
+  if(dy<cam.target[1]-cam.deadzoneY)cam.target[1]=dy+cam.deadzoneY;
+  else if(dy>cam.target[1]+cam.deadzoneY)cam.target[1]=dy-cam.deadzoneY;
+}
+
+// ═══════════════════════════════════════════════════
+//  CAMERA PRO (Days 1-5)
+// ═══════════════════════════════════════════════════
+class CinematicCameraPro{
+  constructor(vw,vh,ww,wh,seed=42){
+    this.viewW=vw;this.viewH=vh;this.worldW=ww;this.worldH=wh;
+    this.pos=new Float32Array(2);this.target=new Float32Array(2);this.look=new Float32Array(2);
+    this.deadzoneX=40;this.deadzoneY=40;this.lookaheadDist=80;this.lookaheadSpeed=8;this.lerpSpeed=5;
+    this.rng=new Random(seed);
+    this._halfW=vw*.5;this._halfH=vh*.5;this._maxX=ww-vw;this._maxY=wh-vh;
+    this.zoom=1;this.minZoom=.25;this.maxZoom=4;this.visibleW=vw;this.visibleH=vh;
+    this._shake=createShakeState();
+  }
+  addTrauma(a){addTraumaSimple(this._shake,a);return this}
+  shake(profile,int=1){addShake(this._shake,profile,int);return this}
+  shakePreset(name,int=1){const p=PRESETS[name.toLowerCase()];if(p)addShake(this._shake,p,int);return this}
+  clearShakes(){clearShakeState(this._shake);return this}
+  _ub(){this.visibleW=this.viewW/this.zoom;this.visibleH=this.viewH/this.zoom;this._maxX=this.worldW-this.visibleW;this._maxY=this.worldH-this.visibleH;if(this._maxX<0)this._maxX=0;if(this._maxY<0)this._maxY=0;}
+  update(dt,px,py,pvx=0,pvy=0){
+    this._ub();fSmooth(this,dt,px,py,pvx,pvy);
+    this.target[0]=this.target[0]<0?0:(this.target[0]>this._maxX?this._maxX:this.target[0]);
+    this.target[1]=this.target[1]<0?0:(this.target[1]>this._maxY?this._maxY:this.target[1]);
+    this.pos[0]+=(this.target[0]-this.pos[0])*this.lerpSpeed*dt;
+    this.pos[1]+=(this.target[1]-this.pos[1])*this.lerpSpeed*dt;
+    updateShake(this._shake,dt);
+  }
+  apply(ctx){
+    let ox=0,oy=0,a=0;
+    if(this._shake.active){computeShake(this._shake);ox=this._shake.offsetX;oy=this._shake.offsetY;a=this._shake.angle;}
+    ctx.translate(ox,oy);ctx.translate(this._halfW,this._halfH);ctx.rotate(a);
+    ctx.scale(this.zoom,this.zoom);ctx.translate(-this._halfW/this.zoom,-this._halfH/this.zoom);
+    ctx.translate(-(this.pos[0]|0),-(this.pos[1]|0));
+  }
+  debugHUD(ctx){
+    const sh=this._shake;let actSlots=0,maxT=0;
+    for(let i=0;i<sh.slotCount;i++){if(sh.slots[i].active){actSlots++;if(sh.slots[i].trauma>maxT)maxT=sh.slots[i].trauma;}}
+    ctx.save();
+    const h=sh.active?94:56;
+    ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(4,4,230,h);
+    ctx.font='11px "JetBrains Mono",monospace';
+    ctx.fillStyle='#fbbf24';
+    ctx.fillText(`zoom: ${this.zoom.toFixed(2)}  pos: ${this.pos[0].toFixed(0)}, ${this.pos[1].toFixed(0)}`,10,18);
+    ctx.fillText(`vis: ${this.visibleW.toFixed(0)} × ${this.visibleH.toFixed(0)}`,10,32);
+    if(sh.active){
+      ctx.fillStyle='#ef4444';
+      ctx.fillText(`shake: ${actSlots} active slot${actSlots>1?'s':''}`,10,50);
+      // Trauma bars per slot
+      let y=60;
+      for(let i=0;i<sh.slotCount;i++){
+        const s=sh.slots[i];if(!s.active)continue;
+        const w=s.trauma*140;
+        ctx.fillStyle=s.isDirectional?'#a78bfa':'#ef4444';
+        ctx.fillRect(10,y,w,6);
+        ctx.fillStyle='#6b7280';ctx.font='9px monospace';
+        ctx.fillText(`f:${s.freq} d:${s.decay.toFixed(1)}${s.isDirectional?' dir':''}`,156,y+6);
+        ctx.font='11px "JetBrains Mono",monospace';
+        y+=10;if(y>h-4)break;
+      }
+    } else {
+      ctx.fillStyle='#374151';ctx.fillText('no active shakes',10,50);
+    }
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  DEMO
+// ═══════════════════════════════════════════════════
+const CW=Math.min(800,window.innerWidth-24),CH=480,WW=2400,WH=1600;
+const canvas=document.getElementById('c');canvas.width=CW;canvas.height=CH;
+document.getElementById('wrap').style.width=CW+'px';
+const ctx=canvas.getContext('2d');
+const cam=new CinematicCameraPro(CW,CH,WW,WH);window.cam=cam;
+
+const player={x:600,y:800,vx:0,vy:0,speed:280,size:16};
+const keys={};
+window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true});
+window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+
+window.fire=name=>cam.shakePreset(name);
+window.fireDir=(dx,dy)=>cam.shake({trauma:.6,freq:18,decay:1.5,maxOffset:20,maxAngle:.03,dirX:dx,dirY:dy});
+window.fireCombo=()=>{cam.shakePreset('explosion');cam.shakePreset('recoil',0.7);cam.shakePreset('rumble');};
+
+// World decoration
+const lms=[];const rng2=new Random(99);
+for(let i=0;i<30;i++){lms.push({x:60+rng2.next()*(WW-120),y:60+rng2.next()*(WH-120),r:10+rng2.next()*30,hue:(rng2.next()*360)|0});}
+
+function drawWorld(){
+  ctx.fillStyle='#13131d';ctx.fillRect(0,0,WW,WH);
+  ctx.strokeStyle='rgba(255,255,255,.03)';ctx.lineWidth=1;
+  for(let x=0;x<=WW;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,WH);ctx.stroke();}
+  for(let y=0;y<=WH;y+=100){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WW,y);ctx.stroke();}
+  ctx.strokeStyle='rgba(239,68,68,.3)';ctx.lineWidth=2;ctx.strokeRect(0,0,WW,WH);
+  for(const l of lms){ctx.fillStyle=`hsla(${l.hue},60%,45%,.25)`;ctx.beginPath();ctx.arc(l.x,l.y,l.r,0,Math.PI*2);ctx.fill();}
+}
+
+function drawPlayer(){
+  ctx.fillStyle='#fbbf24';ctx.fillRect(player.x-player.size,player.y-player.size,player.size*2,player.size*2);
+}
+
+// Shake direction indicator (screen-space)
+function drawShakeViz(ctx){
+  const sh=cam._shake;if(!sh.active)return;
+  const cx=CW-50,cy=CH-50;
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.arc(cx,cy,30,0,Math.PI*2);ctx.stroke();
+  // Offset vector
+  const mag=Math.sqrt(sh.offsetX*sh.offsetX+sh.offsetY*sh.offsetY);
+  if(mag>0.1){
+    const scale=Math.min(mag/20,1)*25;
+    ctx.strokeStyle='#ef4444';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+sh.offsetX/mag*scale,cy+sh.offsetY/mag*scale);ctx.stroke();
+    ctx.fillStyle='#ef4444';
+    ctx.beginPath();ctx.arc(cx+sh.offsetX/mag*scale,cy+sh.offsetY/mag*scale,3,0,Math.PI*2);ctx.fill();
+  }
+  ctx.fillStyle='rgba(255,255,255,.3)';ctx.font='9px monospace';ctx.fillText('offset',cx-14,cy+44);
+  ctx.restore();
+}
+
+let lastTime=performance.now();
+function loop(now){
+  const dt=Math.min((now-lastTime)/1000,.05);lastTime=now;
+  player.vx=0;player.vy=0;
+  if(keys['w']||keys['arrowup'])player.vy=-1;if(keys['s']||keys['arrowdown'])player.vy=1;
+  if(keys['a']||keys['arrowleft'])player.vx=-1;if(keys['d']||keys['arrowright'])player.vx=1;
+  const il=Math.sqrt(player.vx*player.vx+player.vy*player.vy);
+  if(il>0){player.vx/=il;player.vy/=il;}
+  player.x+=player.vx*player.speed*dt;player.y+=player.vy*player.speed*dt;
+  player.x=clamp(player.x,player.size,WW-player.size);player.y=clamp(player.y,player.size,WH-player.size);
+
+  cam.update(dt,player.x,player.y,player.vx*player.speed,player.vy*player.speed);
+  ctx.clearRect(0,0,CW,CH);
+  ctx.save();cam.apply(ctx);drawWorld();drawPlayer();ctx.restore();
+  cam.debugHUD(ctx);
+  drawShakeViz(ctx);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

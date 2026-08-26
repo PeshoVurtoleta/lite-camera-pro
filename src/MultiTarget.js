@@ -6,7 +6,7 @@
  *
  * Used by boss fights, co-op, cutscenes tracking multiple actors.
  *
- * Depends on: @zakkster/lite-lerp (clamp)
+ * Depends on: nothing (pure math -- zoom/position clamps are inline).
  */
 
 /**

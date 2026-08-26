@@ -1,0 +1,2206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lite-camera-pro · Cinematic Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+          rel="stylesheet">
+    <style>
+        :root {
+            --bg-0: #07090f;
+            --bg-1: #0d1220;
+            --bg-2: #131a2c;
+            --bg-3: #1b2238;
+            --line: #1f2742;
+            --line-bright: #2c3556;
+            --text: #e5e7eb;
+            --text-dim: #8b93a8;
+            --text-faint: #525872;
+
+            --amber: #fbbf24;
+            --amber-d: #92400e;
+            --cyan: #22d3ee;
+            --cyan-d: #155e75;
+            --purple: #a78bfa;
+            --purple-d: #5b21b6;
+            --red: #ef4444;
+            --red-d: #991b1b;
+            --green: #34d399;
+            --green-d: #065f46;
+
+            --display: 'Bricolage Grotesque', system-ui, sans-serif;
+            --mono: 'JetBrains Mono', ui-monospace, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg-0);
+            color: var(--text);
+            font-family: var(--display);
+            font-feature-settings: "ss01", "ss02";
+            overflow: hidden;
+            user-select: none;
+        }
+
+        body {
+            background: radial-gradient(ellipse at 30% 0%, rgba(167, 139, 250, 0.08), transparent 50%),
+            radial-gradient(ellipse at 80% 100%, rgba(34, 211, 238, 0.06), transparent 50%),
+            var(--bg-0);
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+        }
+
+        /* ───────── HEADER ───────── */
+        header {
+            height: 56px;
+            border-bottom: 1px solid var(--line);
+            background: linear-gradient(180deg, var(--bg-1), var(--bg-0));
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 24px;
+            position: relative;
+        }
+
+        header::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -1px;
+            height: 1px;
+            background: linear-gradient(90deg,
+            transparent,
+            var(--amber) 20%,
+            var(--cyan) 50%,
+            var(--purple) 80%,
+            transparent);
+            opacity: 0.4;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-mark {
+            width: 28px;
+            height: 28px;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .brand-mark::before,
+        .brand-mark::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border: 1.5px solid var(--amber);
+        }
+
+        .brand-mark::before {
+            inset: 4px;
+            border-color: var(--cyan);
+            transform: rotate(15deg);
+        }
+
+        .brand-mark::after {
+            border-color: var(--amber);
+        }
+
+        .brand-text {
+            font-family: var(--mono);
+            font-weight: 500;
+            font-size: 14px;
+            letter-spacing: -0.01em;
+        }
+
+        .brand-text .pro {
+            color: var(--amber);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .brand-version {
+            color: var(--text-faint);
+            font-family: var(--mono);
+            font-size: 11px;
+            margin-left: 4px;
+        }
+
+        .header-stats {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            align-items: flex-end;
+        }
+
+        .stat-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--text-faint);
+        }
+
+        .stat-value {
+            color: var(--text);
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-value.amber {
+            color: var(--amber);
+        }
+
+        .stat-value.cyan {
+            color: var(--cyan);
+        }
+
+        .stat-value.purple {
+            color: var(--purple);
+        }
+
+        .stat-value.red {
+            color: var(--red);
+        }
+
+        .stat-value.green {
+            color: var(--green);
+        }
+
+        .btn-director {
+            appearance: none;
+            background: linear-gradient(180deg, var(--amber), #d97706);
+            color: #0a0a0a;
+            border: none;
+            padding: 8px 16px;
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-radius: 2px;
+            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3),
+            0 4px 16px rgba(251, 191, 36, 0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .btn-director:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.5),
+            0 6px 20px rgba(251, 191, 36, 0.35);
+        }
+
+        .btn-director:active {
+            transform: translateY(0);
+        }
+
+        .btn-director.playing {
+            background: linear-gradient(180deg, var(--purple), #6d28d9);
+            box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.5),
+            0 4px 16px rgba(167, 139, 250, 0.3);
+        }
+
+        /* ───────── MAIN ───────── */
+        main {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .canvas-wrap {
+            position: relative;
+            background: linear-gradient(135deg, transparent 49.5%, var(--line) 49.5%, var(--line) 50.5%, transparent 50.5%) 0 0/8px 8px,
+            var(--bg-1);
+            background-blend-mode: overlay;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .canvas-wrap::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, transparent 60%, rgba(7, 9, 15, 0.6));
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #game {
+            position: relative;
+            z-index: 0;
+            background: #060814;
+            box-shadow: 0 0 0 1px var(--line-bright),
+            0 0 60px rgba(34, 211, 238, 0.04),
+            0 30px 80px rgba(0, 0, 0, 0.6);
+            cursor: crosshair;
+        }
+
+        /* On-screen title overlay (Director mode) */
+        .title-card {
+            position: absolute;
+            z-index: 5;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .title-card.show {
+            opacity: 1;
+        }
+
+        .title-card .label {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--amber);
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }
+
+        .title-card .title {
+            font-family: var(--display);
+            font-size: 36px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--text);
+            text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8);
+        }
+
+        .title-card .desc {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 6px;
+        }
+
+        /* Click-zoom marker */
+        .click-marker {
+            position: absolute;
+            z-index: 4;
+            width: 24px;
+            height: 24px;
+            border: 1px solid var(--cyan);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            animation: ping 0.6s ease-out forwards;
+        }
+
+        @keyframes ping {
+            0% {
+                transform: translate(-50%, -50%) scale(0.4);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(2);
+                opacity: 0;
+            }
+        }
+
+        /* ───────── CONTROL RAIL ───────── */
+        .controls {
+            background: var(--bg-1);
+            border-left: 1px solid var(--line);
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: var(--line-bright) transparent;
+        }
+
+        .controls::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .controls::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .controls::-webkit-scrollbar-thumb {
+            background: var(--line-bright);
+            border-radius: 4px;
+        }
+
+        section.panel {
+            border-bottom: 1px solid var(--line);
+        }
+
+        section.panel.accent-amber {
+            --acc: var(--amber);
+        }
+
+        section.panel.accent-cyan {
+            --acc: var(--cyan);
+        }
+
+        section.panel.accent-purple {
+            --acc: var(--purple);
+        }
+
+        section.panel.accent-red {
+            --acc: var(--red);
+        }
+
+        section.panel.accent-green {
+            --acc: var(--green);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            transition: background 0.15s;
+        }
+
+        .panel-header:hover {
+            background: var(--bg-2);
+        }
+
+        .panel-header::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            background: var(--acc, var(--text-dim));
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 8px var(--acc, transparent);
+        }
+
+        .panel-title {
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text);
+            flex: 1;
+        }
+
+        .panel-chevron {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--text-faint);
+            transition: transform 0.2s;
+        }
+
+        .panel.collapsed .panel-chevron {
+            transform: rotate(-90deg);
+        }
+
+        .panel-body {
+            padding: 8px 16px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .panel.collapsed .panel-body {
+            display: none;
+        }
+
+        /* ── Form controls ── */
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .row-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .row-grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+        }
+
+        .row-grid-4 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 6px;
+        }
+
+        label.field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        label.field .field-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        label.field .field-value {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--acc, var(--text));
+            font-variant-numeric: tabular-nums;
+            text-transform: none;
+        }
+
+        select, input[type="range"] {
+            width: 100%;
+            font-family: var(--mono);
+            font-size: 11px;
+            background: var(--bg-2);
+            color: var(--text);
+            border: 1px solid var(--line-bright);
+            border-radius: 2px;
+            padding: 6px 8px;
+            appearance: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        select {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'><path fill='%238b93a8' d='M0 0h8L4 5z'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            padding-right: 24px;
+        }
+
+        select:focus, input:focus {
+            outline: 1px solid var(--acc, var(--cyan));
+            outline-offset: -1px;
+        }
+
+        input[type="range"] {
+            height: 4px;
+            background: var(--bg-3);
+            padding: 0;
+            cursor: ew-resize;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--acc, var(--cyan));
+            border: 2px solid var(--bg-1);
+            cursor: ew-resize;
+            box-shadow: 0 0 8px var(--acc, var(--cyan));
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--acc, var(--cyan));
+            border: 2px solid var(--bg-1);
+            cursor: ew-resize;
+            box-shadow: 0 0 8px var(--acc, var(--cyan));
+        }
+
+        button.btn {
+            appearance: none;
+            background: var(--bg-2);
+            color: var(--text);
+            border: 1px solid var(--line-bright);
+            font-family: var(--mono);
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 8px 10px;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.12s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button.btn:hover {
+            background: var(--bg-3);
+            border-color: var(--acc, var(--line-bright));
+            color: var(--acc, var(--text));
+        }
+
+        button.btn:active {
+            transform: translateY(1px);
+        }
+
+        button.btn.solid {
+            background: var(--acc, var(--cyan));
+            color: #0a0a0a;
+            border-color: transparent;
+            font-weight: 700;
+        }
+
+        button.btn.solid:hover {
+            filter: brightness(1.1);
+            color: #0a0a0a;
+        }
+
+        button.btn.toggle.on {
+            background: var(--acc, var(--cyan));
+            color: #0a0a0a;
+            border-color: transparent;
+            font-weight: 700;
+            box-shadow: 0 0 12px var(--acc, var(--cyan));
+        }
+
+        .checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--mono);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 4px 0;
+        }
+
+        .checkbox input {
+            display: none;
+        }
+
+        .checkbox .box {
+            width: 12px;
+            height: 12px;
+            border: 1px solid var(--line-bright);
+            background: var(--bg-2);
+            border-radius: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.12s;
+        }
+
+        .checkbox input:checked + .box {
+            background: var(--acc, var(--cyan));
+            border-color: transparent;
+        }
+
+        .checkbox input:checked + .box::after {
+            content: "";
+            width: 4px;
+            height: 7px;
+            border-right: 2px solid #0a0a0a;
+            border-bottom: 2px solid #0a0a0a;
+            transform: rotate(45deg) translate(-1px, -1px);
+        }
+
+        .checkbox:hover {
+            color: var(--text);
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--line);
+            margin: 4px 0;
+        }
+
+        .note {
+            font-family: var(--mono);
+            font-size: 9px;
+            color: var(--text-faint);
+            letter-spacing: 0.04em;
+            line-height: 1.5;
+        }
+
+        /* ───────── FOOTER ───────── */
+        footer {
+            height: 32px;
+            border-top: 1px solid var(--line);
+            background: var(--bg-1);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 18px;
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--text-faint);
+            letter-spacing: 0.06em;
+        }
+
+        .hint {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .hint kbd {
+            background: var(--bg-3);
+            border: 1px solid var(--line-bright);
+            padding: 1px 5px;
+            border-radius: 2px;
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 9px;
+            font-weight: 500;
+        }
+
+        .hint-spacer {
+            flex: 1;
+        }
+
+        .tag {
+            font-family: var(--mono);
+            font-size: 9px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            padding: 2px 6px;
+            border: 1px solid var(--line-bright);
+            border-radius: 2px;
+        }
+
+        .tag.live::before {
+            content: "";
+            display: inline-block;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--green);
+            margin-right: 5px;
+            vertical-align: middle;
+            box-shadow: 0 0 6px var(--green);
+            animation: pulse 1.6s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        /* Custom shake panel value pills */
+        .dir-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 3px;
+            width: 80px;
+            height: 80px;
+            margin: 4px auto;
+        }
+
+        .dir-pad button {
+            background: var(--bg-2);
+            border: 1px solid var(--line-bright);
+            border-radius: 1px;
+            cursor: pointer;
+            transition: all 0.1s;
+            position: relative;
+        }
+
+        .dir-pad button:hover {
+            border-color: var(--red);
+            background: var(--bg-3);
+        }
+
+        .dir-pad button.active {
+            background: var(--red);
+            border-color: transparent;
+            box-shadow: 0 0 8px var(--red);
+        }
+
+        .dir-pad button.center {
+            background: var(--bg-3);
+        }
+
+        .dir-pad button.center.active {
+            background: var(--red);
+        }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-text">
+            lite-camera<span class="pro">·PRO</span>
+            <span class="brand-version">v1.0.0</span>
+        </div>
+    </div>
+
+    <div class="header-stats">
+        <div class="stat">
+            <span class="stat-label">FPS</span>
+            <span class="stat-value amber" id="stat-fps">60</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Frame</span>
+            <span class="stat-value" id="stat-frame">16.6ms</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Shake Slots</span>
+            <span class="stat-value red" id="stat-shake">0/8</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Parallax</span>
+            <span class="stat-value green" id="stat-parallax">0/16</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Mode</span>
+            <span class="stat-value cyan" id="stat-mode">SMOOTH</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Zoom</span>
+            <span class="stat-value purple" id="stat-zoom">1.000×</span>
+        </div>
+    </div>
+
+    <button class="btn-director" id="btn-director">▶ Run Director</button>
+</header>
+
+<main>
+    <div class="canvas-wrap">
+        <canvas id="game" width="900" height="600"></canvas>
+        <div class="title-card" id="title-card">
+            <div class="label" id="title-label">Chapter</div>
+            <div class="title" id="title-title">Title</div>
+            <div class="desc" id="title-desc">Description</div>
+        </div>
+    </div>
+
+    <aside class="controls">
+
+        <!-- ───── FOLLOW MODE ───── -->
+        <section class="panel accent-cyan" data-panel="follow">
+            <div class="panel-header">
+                <span class="panel-title">Follow Mode</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <label class="field">
+                    <div class="field-row">
+                        <span>Active strategy</span>
+                        <span class="field-value" id="lbl-mode">SMOOTH</span>
+                    </div>
+                    <select id="ctrl-mode">
+                        <option value="0">SMOOTH — deadzone + lookahead</option>
+                        <option value="1">LOCK — snap to target</option>
+                        <option value="2">PREDICTIVE — velocity extrapolation</option>
+                        <option value="3">CUT — instant jump</option>
+                        <option value="4">HYBRID — smooth X, locked Y</option>
+                    </select>
+                </label>
+
+                <div class="row-grid">
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Deadzone X</span>
+                            <span class="field-value" id="lbl-dzx">40</span>
+                        </div>
+                        <input type="range" id="ctrl-dzx" min="0" max="200" value="40">
+                    </label>
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Deadzone Y</span>
+                            <span class="field-value" id="lbl-dzy">40</span>
+                        </div>
+                        <input type="range" id="ctrl-dzy" min="0" max="200" value="40">
+                    </label>
+                </div>
+
+                <div class="row-grid">
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Lookahead</span>
+                            <span class="field-value" id="lbl-look">80</span>
+                        </div>
+                        <input type="range" id="ctrl-look" min="0" max="200" value="80">
+                    </label>
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Lerp speed</span>
+                            <span class="field-value" id="lbl-lerp">5.0</span>
+                        </div>
+                        <input type="range" id="ctrl-lerp" min="0.5" max="20" step="0.1" value="5">
+                    </label>
+                </div>
+
+                <label class="field">
+                    <div class="field-row">
+                        <span>Predict time (sec)</span>
+                        <span class="field-value" id="lbl-predict">0.30</span>
+                    </div>
+                    <input type="range" id="ctrl-predict" min="0" max="1" step="0.01" value="0.3">
+                </label>
+            </div>
+        </section>
+
+        <!-- ───── ZOOM ───── -->
+        <section class="panel accent-purple" data-panel="zoom">
+            <div class="panel-header">
+                <span class="panel-title">Zoom</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <label class="field">
+                    <div class="field-row">
+                        <span>Target zoom</span>
+                        <span class="field-value" id="lbl-zoom">1.00</span>
+                    </div>
+                    <input type="range" id="ctrl-zoom" min="0.25" max="4" step="0.05" value="1">
+                </label>
+
+                <label class="field">
+                    <div class="field-row">
+                        <span>Transition (sec)</span>
+                        <span class="field-value" id="lbl-zoomdur">0.50</span>
+                    </div>
+                    <input type="range" id="ctrl-zoomdur" min="0" max="3" step="0.05" value="0.5">
+                </label>
+
+                <div class="note">Click anywhere on canvas to zoomAt(point).</div>
+
+                <div class="row-grid-3">
+                    <button class="btn" data-zoom-preset="0.5">0.5×</button>
+                    <button class="btn" data-zoom-preset="1">1.0×</button>
+                    <button class="btn" data-zoom-preset="2">2.0×</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ───── SHAKE ───── -->
+        <section class="panel accent-red" data-panel="shake">
+            <div class="panel-header">
+                <span class="panel-title">Shake Engine</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <div class="note">8 built-in presets · noise-based · layered up to 8 slots.</div>
+                <div class="row-grid">
+                    <button class="btn" data-preset="explosion">Explosion</button>
+                    <button class="btn" data-preset="earthquake">Earthquake</button>
+                    <button class="btn" data-preset="recoil">Recoil</button>
+                    <button class="btn" data-preset="impact">Impact</button>
+                    <button class="btn" data-preset="landing">Landing</button>
+                    <button class="btn" data-preset="damage">Damage</button>
+                    <button class="btn" data-preset="rumble">Rumble</button>
+                    <button class="btn" data-preset="heavy_impact">Heavy</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="note">Custom profile</div>
+
+                <div class="row-grid">
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Trauma</span>
+                            <span class="field-value" id="lbl-trauma">0.60</span>
+                        </div>
+                        <input type="range" id="ctrl-trauma" min="0" max="1" step="0.01" value="0.6">
+                    </label>
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Freq</span>
+                            <span class="field-value" id="lbl-freq">15</span>
+                        </div>
+                        <input type="range" id="ctrl-freq" min="2" max="40" step="1" value="15">
+                    </label>
+                </div>
+
+                <div class="row-grid">
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Decay</span>
+                            <span class="field-value" id="lbl-decay">1.0</span>
+                        </div>
+                        <input type="range" id="ctrl-decay" min="0.05" max="5" step="0.05" value="1">
+                    </label>
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Max offset</span>
+                            <span class="field-value" id="lbl-offset">15</span>
+                        </div>
+                        <input type="range" id="ctrl-offset" min="0" max="50" step="1" value="15">
+                    </label>
+                </div>
+
+                <label class="field">
+                    <div class="field-row">
+                        <span>Max angle (rad)</span>
+                        <span class="field-value" id="lbl-angle">0.05</span>
+                    </div>
+                    <input type="range" id="ctrl-angle" min="0" max="0.2" step="0.005" value="0.05">
+                </label>
+
+                <div class="field">
+                    <div class="field-row">
+                        <span>Direction</span>
+                        <span class="field-value" id="lbl-dir">omni</span>
+                    </div>
+                    <div class="dir-pad" id="dir-pad">
+                        <button data-dx="-1" data-dy="-1" title="↖"></button>
+                        <button data-dx="0" data-dy="-1" title="↑"></button>
+                        <button data-dx="1" data-dy="-1" title="↗"></button>
+                        <button data-dx="-1" data-dy="0" title="←"></button>
+                        <button data-dx="0" data-dy="0" title="omni" class="center active"></button>
+                        <button data-dx="1" data-dy="0" title="→"></button>
+                        <button data-dx="-1" data-dy="1" title="↙"></button>
+                        <button data-dx="0" data-dy="1" title="↓"></button>
+                        <button data-dx="1" data-dy="1" title="↘"></button>
+                    </div>
+                </div>
+
+                <div class="row-grid">
+                    <button class="btn solid" id="btn-fire-custom">Fire Custom</button>
+                    <button class="btn" id="btn-clear-shake">Clear All</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ───── SEQUENCES ───── -->
+        <section class="panel accent-purple" data-panel="seq">
+            <div class="panel-header">
+                <span class="panel-title">Cinematic Sequences</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <div class="note">Built-in presets · timeline-driven · zero-GC.</div>
+                <div class="row-grid">
+                    <button class="btn" id="btn-seq-pan">Pan To Boss</button>
+                    <button class="btn" id="btn-seq-zoom">Dramatic Zoom</button>
+                    <button class="btn" id="btn-seq-boss">Boss Reveal</button>
+                    <button class="btn" id="btn-seq-tour">Custom Tour</button>
+                </div>
+                <button class="btn" id="btn-seq-stop">Stop Sequence</button>
+                <div class="note" id="seq-status">Idle.</div>
+            </div>
+        </section>
+
+        <!-- ───── MULTI-TARGET ───── -->
+        <section class="panel accent-green" data-panel="mt">
+            <div class="panel-header">
+                <span class="panel-title">Multi-Target Framing</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <button class="btn toggle" id="btn-mt-toggle">Track Player + Allies</button>
+                <div class="row-grid">
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Padding</span>
+                            <span class="field-value" id="lbl-mt-pad">80</span>
+                        </div>
+                        <input type="range" id="ctrl-mt-pad" min="0" max="300" step="5" value="80">
+                    </label>
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Zoom speed</span>
+                            <span class="field-value" id="lbl-mt-zs">4.0</span>
+                        </div>
+                        <input type="range" id="ctrl-mt-zs" min="0.5" max="20" step="0.1" value="4">
+                    </label>
+                </div>
+                <div class="row-grid">
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Min zoom</span>
+                            <span class="field-value" id="lbl-mt-min">0.30</span>
+                        </div>
+                        <input type="range" id="ctrl-mt-min" min="0.1" max="1" step="0.05" value="0.3">
+                    </label>
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Max zoom</span>
+                            <span class="field-value" id="lbl-mt-max">2.00</span>
+                        </div>
+                        <input type="range" id="ctrl-mt-max" min="1" max="4" step="0.05" value="2">
+                    </label>
+                </div>
+                <div class="note">Drag the cyan/purple allies in canvas to test framing.</div>
+            </div>
+        </section>
+
+        <!-- ───── BOUNDS ───── -->
+        <section class="panel accent-cyan" data-panel="bounds">
+            <div class="panel-header">
+                <span class="panel-title">Smart Bounds</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <label class="field">
+                    <div class="field-row">
+                        <span>All edges</span>
+                        <span class="field-value" id="lbl-bounds">HARD</span>
+                    </div>
+                    <select id="ctrl-bounds">
+                        <option value="0">HARD — instant clamp</option>
+                        <option value="1">SOFT — smoothstep deceleration</option>
+                        <option value="2">ELASTIC — overshoot &amp; spring</option>
+                        <option value="3">NONE — no enforcement</option>
+                    </select>
+                </label>
+
+                <div class="row-grid">
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Soft zone</span>
+                            <span class="field-value" id="lbl-softzone">80</span>
+                        </div>
+                        <input type="range" id="ctrl-softzone" min="20" max="200" step="5" value="80">
+                    </label>
+                    <label class="field">
+                        <div class="field-row">
+                            <span>Elastic max</span>
+                            <span class="field-value" id="lbl-elastic">30</span>
+                        </div>
+                        <input type="range" id="ctrl-elastic" min="5" max="100" step="1" value="30">
+                    </label>
+                </div>
+
+                <button class="btn toggle" id="btn-bounds-rect">Custom Rect (arena)</button>
+                <div class="note">Custom rect creates a 1200×1000 bounded zone at world origin.</div>
+            </div>
+        </section>
+
+        <!-- ───── PARALLAX ───── -->
+        <section class="panel accent-green" data-panel="parallax">
+            <div class="panel-header">
+                <span class="panel-title">Parallax Layers</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <label class="checkbox"><input type="checkbox" id="cb-sky" checked><span class="box"></span>Stars
+                    (0.05×)</label>
+                <label class="checkbox"><input type="checkbox" id="cb-mountains" checked><span class="box"></span>Mountains
+                    (0.20×)</label>
+                <label class="checkbox"><input type="checkbox" id="cb-hills" checked><span class="box"></span>Hills
+                    (0.50×)</label>
+                <label class="checkbox"><input type="checkbox" id="cb-fog" checked><span class="box"></span>Fog (0.75×)</label>
+                <label class="checkbox"><input type="checkbox" id="cb-fg" checked><span class="box"></span>Foreground
+                    dust (1.30×)</label>
+            </div>
+        </section>
+
+        <!-- ───── DEBUG ───── -->
+        <section class="panel accent-amber" data-panel="debug">
+            <div class="panel-header">
+                <span class="panel-title">Debug Overlay</span>
+                <span class="panel-chevron">▼</span>
+            </div>
+            <div class="panel-body">
+                <label class="checkbox"><input type="checkbox" id="cb-hud" checked><span class="box"></span>Show
+                    HUD</label>
+                <label class="checkbox"><input type="checkbox" id="cb-world" checked><span class="box"></span>Show world
+                    overlay (deadzone + bounds)</label>
+                <div class="divider"></div>
+                <div class="row-grid">
+                    <label class="checkbox"><input type="checkbox" id="cb-hud-pos" checked><span class="box"></span>Position</label>
+                    <label class="checkbox"><input type="checkbox" id="cb-hud-shake" checked><span class="box"></span>Shake</label>
+                    <label class="checkbox"><input type="checkbox" id="cb-hud-seq" checked><span class="box"></span>Sequence</label>
+                    <label class="checkbox"><input type="checkbox" id="cb-hud-pllx" checked><span class="box"></span>Parallax</label>
+                </div>
+            </div>
+        </section>
+
+    </aside>
+</main>
+
+<footer>
+    <span class="hint"><kbd>WASD</kbd> Move</span>
+    <span class="hint"><kbd>Q</kbd>/<kbd>E</kbd> Zoom</span>
+    <span class="hint"><kbd>Space</kbd> Boss reveal</span>
+    <span class="hint"><kbd>Click</kbd> Zoom-at-point</span>
+    <span class="hint-spacer"></span>
+    <span class="tag">CANVAS 2D</span>
+    <span class="tag">ZERO-GC</span>
+    <span class="tag live">RUNTIME</span>
+</footer>
+
+<!-- 1. Import Map for Dependency Resolution -->
+<script type="importmap">
+{
+  "imports": {
+    "@zakkster/lite-lerp": "https://esm.sh/@zakkster/lite-lerp",
+    "@zakkster/lite-ease": "https://esm.sh/@zakkster/lite-ease",
+    "@zakkster/lite-noise": "https://esm.sh/@zakkster/lite-noise",
+    "@zakkster/lite-timeline": "https://esm.sh/@zakkster/lite-timeline",
+    "@zakkster/lite-random": "https://esm.sh/@zakkster/lite-random",
+    "@zakkster/lite-camera": "https://esm.sh/@zakkster/lite-camera"
+  }
+}
+</script>
+
+<!-- 2. Main Module Script -->
+<script type="module">
+    import { CinematicCameraPro, FollowMode, BoundsType, drawDebugHUD, drawDebugWorld } from '../src/index.js';
+    import { clamp } from '@zakkster/lite-lerp';
+    import { easeOutExpo, easeInOutCubic } from '@zakkster/lite-ease';
+    import { Random } from '@zakkster/lite-random';
+
+    // ─── World setup ────────────────────────────────────────────────────────
+    const VIEW_W = 900, VIEW_H = 600;
+    const WORLD_W = 3600, WORLD_H = 2400;
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const camera = new CinematicCameraPro(VIEW_W, VIEW_H, WORLD_W, WORLD_H, 7);
+    camera.lerpSpeed = 5.0;
+
+    // Initial parallax layers
+    camera.addParallaxLayer('stars', 0.05);
+    camera.addParallaxLayer('mountains', 0.20);
+    camera.addParallaxLayer('hills', 0.50);
+    camera.addParallaxLayer('fog', 0.75);
+    camera.addParallaxLayer('foreground', 1.30);
+
+    // Center the camera on the player initially
+    const playerStart = {x: WORLD_W * 0.5, y: WORLD_H * 0.65};
+    camera.pos[0] = playerStart.x - VIEW_W * 0.5;
+    camera.pos[1] = playerStart.y - VIEW_H * 0.5;
+    camera.target[0] = camera.pos[0];
+    camera.target[1] = camera.pos[1];
+
+    // ─── Scene state ────────────────────────────────────────────────────────
+    const TRAIL_LEN = 8;
+    const player = {
+        x: playerStart.x, y: playerStart.y,
+        vx: 0, vy: 0,
+        speed: 320,
+        facing: 1,
+        // Zero-GC Trail Ring Buffer
+        trail: new Float32Array(TRAIL_LEN * 2),
+        trailHead: 0,
+        trailActive: 0
+    };
+
+    // Allies for multi-target
+    const allyA = {x: playerStart.x - 240, y: playerStart.y, color: '#22d3ee', label: 'A'};
+    const allyB = {x: playerStart.x + 240, y: playerStart.y, color: '#a78bfa', label: 'B'};
+    const multiTargets = [player, allyA, allyB];
+
+    // Boss (hidden until reveal)
+    const boss = {x: WORLD_W - 400, y: WORLD_H * 0.4, pulse: 0};
+
+    // Pre-allocated object for coordinate lookups
+    const tmpVec = { x: 0, y: 0 };
+
+    const PARTICLE_POOL = 200;
+    const particles = new Array(PARTICLE_POOL);
+    for (let i = 0; i < PARTICLE_POOL; i++) {
+        particles[i] = {active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0, color: '#fff', size: 2};
+    }
+
+    function spawnParticles(x, y, count, palette) {
+        let spawned = 0;
+        for (let i = 0; i < PARTICLE_POOL && spawned < count; i++) {
+            const p = particles[i];
+            if (!p.active) {
+                p.active = true;
+                p.x = x;
+                p.y = y;
+                const a = Math.random() * Math.PI * 2;
+                const s = 80 + Math.random() * 220;
+                p.vx = Math.cos(a) * s;
+                p.vy = Math.sin(a) * s - 40;
+                p.life = p.maxLife = 0.5 + Math.random() * 0.6;
+                p.color = palette[Math.floor(Math.random() * palette.length)];
+                p.size = 1.5 + Math.random() * 2.5;
+                spawned++;
+            }
+        }
+    }
+
+    function updateParticles(dt) {
+        for (let i = 0; i < PARTICLE_POOL; i++) {
+            const p = particles[i];
+            if (!p.active) continue;
+            p.life -= dt;
+            if (p.life <= 0) {
+                p.active = false;
+                continue;
+            }
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.vy += 600 * dt; // gravity
+            p.vx *= 0.96;
+        }
+    }
+
+    function drawParticles(ctx) {
+        for (let i = 0; i < PARTICLE_POOL; i++) {
+            const p = particles[i];
+            if (!p.active) continue;
+            ctx.globalAlpha = p.life / p.maxLife;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    // ─── Procedurally-generated background data ────────────────────────────
+    // Pre-computed once. Drawn each frame via parallax layers.
+    const stars = (() => {
+        const rng = new Random(42);
+        const arr = [];
+        for (let i = 0; i < 320; i++) {
+            arr.push({
+                x: rng.next() * WORLD_W * 1.5,
+                y: rng.next() * WORLD_H * 0.6,
+                r: 0.3 + rng.next() * 1.4,
+                tw: rng.next() * Math.PI * 2,
+                speed: 1 + rng.next() * 2,
+            });
+        }
+        return arr;
+    })();
+
+    const mountains = (() => {
+        const rng = new Random(91);
+        const arr = [];
+        let x = -200;
+        while (x < WORLD_W + 400) {
+            const w = 240 + rng.next() * 360;
+            const h = 220 + rng.next() * 260;
+            arr.push({x, w, h});
+            x += w * 0.55;
+        }
+        return arr;
+    })();
+
+    const hills = (() => {
+        const rng = new Random(173);
+        const arr = [];
+        let x = -200;
+        while (x < WORLD_W + 400) {
+            const w = 320 + rng.next() * 280;
+            const h = 120 + rng.next() * 140;
+            arr.push({x, w, h});
+            x += w * 0.6;
+        }
+        return arr;
+    })();
+
+    const platforms = (() => {
+        const rng = new Random(11);
+        const arr = [
+            {x: 0, y: WORLD_H - 80, w: WORLD_W, h: 80},
+        ];
+        for (let i = 0; i < 16; i++) {
+            const x = 200 + rng.next() * (WORLD_W - 400);
+            const y = WORLD_H * 0.3 + rng.next() * (WORLD_H * 0.5);
+            const w = 140 + rng.next() * 180;
+            arr.push({x, y, w, h: 24});
+        }
+        return arr;
+    })();
+
+    const fgDust = (() => {
+        const rng = new Random(7);
+        const arr = [];
+        for (let i = 0; i < 60; i++) {
+            arr.push({
+                x: rng.next() * WORLD_W * 1.4,
+                y: rng.next() * WORLD_H,
+                r: 0.5 + rng.next() * 1.2,
+                phase: rng.next() * Math.PI * 2,
+            });
+        }
+        return arr;
+    })();
+
+    // ─── Cached Gradients (Zero GC Hot Path) ───────────────────────────────
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, WORLD_H * 0.7);
+    skyGrad.addColorStop(0, '#0a0e22');
+    skyGrad.addColorStop(0.4, '#0f1635');
+    skyGrad.addColorStop(0.85, '#1c1846');
+    skyGrad.addColorStop(1, '#2d1f4f');
+
+    const fogGrad = ctx.createLinearGradient(0, WORLD_H * 0.72, 0, WORLD_H * 0.95);
+    fogGrad.addColorStop(0, 'rgba(34, 211, 238, 0)');
+    fogGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.05)');
+    fogGrad.addColorStop(1, 'rgba(167, 139, 250, 0.08)');
+
+    // ─── Scene rendering ───────────────────────────────────────────────────
+    let sceneTime = 0;
+
+    function drawStarsLayer(ctx) {
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(-200, -200, WORLD_W * 1.6, WORLD_H * 0.85);
+
+        ctx.fillStyle = 'rgba(251, 245, 220, 0.95)';
+        ctx.beginPath();
+        ctx.arc(WORLD_W * 0.78, WORLD_H * 0.18, 36, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.10)';
+        ctx.beginPath();
+        ctx.arc(WORLD_W * 0.78, WORLD_H * 0.18, 80, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (let i = 0; i < stars.length; i++) {
+            const s = stars[i];
+            const tw = 0.5 + 0.5 * Math.sin(sceneTime * s.speed + s.tw);
+            ctx.globalAlpha = 0.4 + 0.6 * tw;
+            ctx.fillStyle = i % 7 === 0 ? '#fbbf24' : '#e5e7eb';
+            ctx.fillRect(s.x | 0, s.y | 0, s.r, s.r);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    function drawMountainsLayer(ctx) {
+        ctx.fillStyle = '#1a1f3a';
+        for (let i = 0; i < mountains.length; i++) {
+            const m = mountains[i];
+            const baseY = WORLD_H * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(m.x, baseY);
+            ctx.lineTo(m.x + m.w * 0.5, baseY - m.h);
+            ctx.lineTo(m.x + m.w, baseY);
+            ctx.closePath();
+            ctx.fill();
+        }
+        // Thin highlight on the mountain ridge
+        ctx.strokeStyle = 'rgba(167, 139, 250, 0.25)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < mountains.length; i++) {
+            const m = mountains[i];
+            const baseY = WORLD_H * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(m.x, baseY);
+            ctx.lineTo(m.x + m.w * 0.5, baseY - m.h);
+            ctx.lineTo(m.x + m.w, baseY);
+            ctx.stroke();
+        }
+    }
+
+    function drawHillsLayer(ctx) {
+        ctx.fillStyle = '#0e1426';
+        for (let i = 0; i < hills.length; i++) {
+            const h = hills[i];
+            const baseY = WORLD_H * 0.85;
+            ctx.beginPath();
+            ctx.moveTo(h.x, baseY);
+            ctx.quadraticCurveTo(h.x + h.w * 0.5, baseY - h.h, h.x + h.w, baseY);
+            ctx.lineTo(h.x + h.w, baseY + 200);
+            ctx.lineTo(h.x, baseY + 200);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+
+    function drawFogLayer(ctx) {
+        ctx.fillStyle = fogGrad;
+        ctx.fillRect(-200, WORLD_H * 0.72, WORLD_W * 1.4, WORLD_H * 0.3);
+    }
+
+    function drawForegroundLayer(ctx) {
+        for (let i = 0; i < fgDust.length; i++) {
+            const d = fgDust[i];
+            const yOff = Math.sin(sceneTime * 0.6 + d.phase) * 12;
+            ctx.globalAlpha = 0.18 + 0.12 * Math.sin(sceneTime + d.phase);
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(d.x, d.y + yOff, d.r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    function drawWorld(ctx) {
+        // ── Ground / platforms ──
+        for (let i = 0; i < platforms.length; i++) {
+            const p = platforms[i];
+            // Base
+            ctx.fillStyle = '#0a0d18';
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            // Top edge highlight (cyan accent)
+            ctx.fillStyle = 'rgba(34, 211, 238, 0.45)';
+            ctx.fillRect(p.x, p.y, p.w, 2);
+            // Tech pattern on the ground
+            ctx.fillStyle = 'rgba(34, 211, 238, 0.06)';
+            for (let x = p.x + 8; x < p.x + p.w - 8; x += 16) {
+                ctx.fillRect(x, p.y + 6, 1, 4);
+            }
+        }
+
+        // ── Boss (if visible / pulsing) ──
+        boss.pulse += 0.03;
+        const bossPulse = 0.85 + Math.sin(boss.pulse) * 0.15;
+        const bossSize = 56;
+
+        ctx.save();
+        ctx.translate(boss.x, boss.y);
+
+        // Outer glow
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = '#ef4444';
+        ctx.globalAlpha = 0.35 * bossPulse;
+        ctx.fillStyle = '#ef4444';
+
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+            const r = bossSize * 1.6 * bossPulse;
+            const x = Math.cos(a) * r, y = Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1.0;
+
+        // Inner body
+        ctx.fillStyle = '#1c0a14';
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+            const x = Math.cos(a) * bossSize, y = Math.sin(a) * bossSize;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.globalAlpha = bossPulse;
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(0, 0, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        // Boss label
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 11px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BOSS', 0, bossSize + 24);
+        ctx.restore();
+
+        // ── Allies ──
+        for (const ally of [allyA, allyB]) {
+            ctx.save();
+            ctx.translate(ally.x, ally.y);
+            ctx.shadowBlur = 16;
+            ctx.shadowColor = ally.color;
+            ctx.fillStyle = ally.color;
+            ctx.beginPath();
+            ctx.arc(0, -10, 14, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#0a0d18';
+            ctx.beginPath();
+            ctx.arc(0, -10, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = ally.color;
+            ctx.font = 'bold 9px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(ally.label, 0, -7);
+            ctx.restore();
+        }
+
+        // ── Player trail ──
+        for (let i = 0; i < player.trailActive; i++) {
+            const idx = (player.trailHead - 1 - i + TRAIL_LEN) % TRAIL_LEN;
+            const tx = player.trail[idx * 2];
+            const ty = player.trail[idx * 2 + 1];
+            const a = 1 - (i / player.trailActive);
+
+            ctx.globalAlpha = a * 0.5;
+            ctx.fillStyle = '#fbbf24';
+            const sz = 4 + a * 8;
+            ctx.fillRect(tx - sz / 2, ty - 14 - sz / 2, sz, sz);
+        }
+        ctx.globalAlpha = 1;
+
+        // ── Player ──
+        ctx.save();
+        ctx.translate(player.x, player.y);
+
+        // Glow
+        ctx.shadowBlur = 24;
+        ctx.shadowColor = '#fbbf24';
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(0, -16, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Inner core
+        ctx.fillStyle = '#fff8e0';
+        ctx.beginPath();
+        ctx.arc(0, -16, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Body
+        ctx.fillStyle = '#0a0d18';
+        ctx.fillRect(-9, -8, 18, 14);
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-9, -8, 18, 14);
+
+        // Eye
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(-2 + player.facing * 4, -4, 3, 3);
+        ctx.restore();
+
+        // Particles
+        drawParticles(ctx);
+    }
+
+    // ─── Input & Click-zoom marker ─────────────────────────────────────────
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        camera.screenToWorld(sx, sy, tmpVec);
+
+        const dur = parseFloat(document.getElementById('ctrl-zoomdur').value);
+        const targetZoom = parseFloat(document.getElementById('ctrl-zoom').value);
+        camera.zoomAt(tmpVec.x, tmpVec.y, targetZoom, dur, easeOutExpo);
+
+        const m = document.createElement('div');
+        m.className = 'click-marker';
+        m.style.left = e.clientX - rect.left + 'px';
+        m.style.top = e.clientY - rect.top + 'px';
+        canvas.parentElement.appendChild(m);
+        setTimeout(() => m.remove(), 600);
+    });
+
+    const keys = {};
+    window.addEventListener('keydown', e => {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+        keys[e.key.toLowerCase()] = true;
+
+        if (e.key === ' ') runBossReveal();
+        if (e.key.toLowerCase() === 'q') {
+            const z = clamp(camera.zoom * 0.85, camera.minZoom, camera.maxZoom);
+            camera.setZoom(z, 0.3, easeOutExpo);
+            document.getElementById('ctrl-zoom').value = z;
+            document.getElementById('lbl-zoom').textContent = z.toFixed(2);
+        }
+        if (e.key.toLowerCase() === 'e') {
+            const z = clamp(camera.zoom * 1.18, camera.minZoom, camera.maxZoom);
+            camera.setZoom(z, 0.3, easeOutExpo);
+            document.getElementById('ctrl-zoom').value = z;
+            document.getElementById('lbl-zoom').textContent = z.toFixed(2);
+        }
+    });
+
+    window.addEventListener('keyup', e => {
+        keys[e.key.toLowerCase()] = false;
+    });
+
+    function updatePlayer(dt) {
+        let ax = 0, ay = 0;
+        if (keys['w'] || keys['arrowup']) ay = -1;
+        if (keys['s'] || keys['arrowdown']) ay = 1;
+        if (keys['a'] || keys['arrowleft']) {
+            ax = -1;
+            player.facing = -1;
+        }
+        if (keys['d'] || keys['arrowright']) {
+            ax = 1;
+            player.facing = 1;
+        }
+
+        const len = Math.sqrt(ax * ax + ay * ay);
+        if (len > 0) {
+            ax /= len;
+            ay /= len;
+        }
+
+        const targetVx = ax * player.speed;
+        const targetVy = ay * player.speed;
+        player.vx += (targetVx - player.vx) * 10 * dt;
+        player.vy += (targetVy - player.vy) * 10 * dt;
+
+        player.x += player.vx * dt;
+        player.y += player.vy * dt;
+        player.x = clamp(player.x, 40, WORLD_W - 40);
+        player.y = clamp(player.y, 40, WORLD_H - 40);
+
+        // Ring buffer logic for zero-alloc trail
+        if (Math.abs(player.vx) + Math.abs(player.vy) > 80) {
+            player.trail[player.trailHead * 2] = player.x;
+            player.trail[player.trailHead * 2 + 1] = player.y;
+            player.trailHead = (player.trailHead + 1) % TRAIL_LEN;
+            if (player.trailActive < TRAIL_LEN) player.trailActive++;
+        } else if (player.trailActive > 0) {
+            player.trailActive--;
+        }
+    }
+
+    // ─── Render ────────────────────────────────────────────────────────────
+    function render() {
+        ctx.fillStyle = '#060814';
+        ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+        if (camera._parallax.activeCount > 0) {
+            ctx.save(); camera.applyParallax('stars', ctx); drawStarsLayer(ctx); ctx.restore();
+            ctx.save(); camera.applyParallax('mountains', ctx); drawMountainsLayer(ctx); ctx.restore();
+            ctx.save(); camera.applyParallax('hills', ctx); drawHillsLayer(ctx); ctx.restore();
+            ctx.save(); camera.applyParallax('fog', ctx); drawFogLayer(ctx); ctx.restore();
+        }
+
+        ctx.save();
+        camera.apply(ctx);
+        drawWorld(ctx);
+        if (uiState.showWorldDebug) drawDebugWorld(camera, ctx);
+        ctx.restore();
+
+        if (camera._parallax.activeCount > 0) {
+            ctx.save(); camera.applyParallax('foreground', ctx); drawForegroundLayer(ctx); ctx.restore();
+        }
+
+        if (uiState.showHud) drawDebugHUD(camera, ctx, uiState.hudConfig);
+    }
+
+    // ─── Main loop ─────────────────────────────────────────────────────────
+    let lastTime = performance.now();
+    let fpsAccum = 0, fpsCount = 0, fpsValue = 60, frameMs = 16.6;
+
+    function loop(now) {
+        const dt = Math.min((now - lastTime) / 1000, 0.05);
+        lastTime = now;
+        sceneTime += dt;
+
+        updatePlayer(dt);
+        updateParticles(dt);
+        camera.update(dt, player.x, player.y, player.vx, player.vy);
+
+        render();
+
+        const ms = (performance.now() - now);
+        fpsAccum += dt;
+        fpsCount++;
+        if (fpsAccum >= 0.5) {
+            fpsValue = Math.round(fpsCount / fpsAccum);
+            frameMs = (fpsAccum * 1000 / fpsCount).toFixed(1);
+            fpsAccum = 0;
+            fpsCount = 0;
+            updateHeaderStats();
+        }
+
+        requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+
+    // ─── Header stats ──────────────────────────────────────────────────────
+    function updateHeaderStats() {
+        document.getElementById('stat-fps').textContent = fpsValue;
+        document.getElementById('stat-frame').textContent = frameMs + 'ms';
+        let activeShakes = 0;
+        for (let i = 0; i < camera._shake.slotCount; i++) {
+            if (camera._shake.slots[i].active) activeShakes++;
+        }
+        document.getElementById('stat-shake').textContent = activeShakes + '/8';
+        document.getElementById('stat-parallax').textContent = camera._parallax.activeCount + '/16';
+        document.getElementById('stat-mode').textContent = FollowMode[camera.mode] || 'SMOOTH';
+        document.getElementById('stat-zoom').textContent = camera.zoom.toFixed(3) + '×';
+    }
+
+    setInterval(updateHeaderStats, 100);
+
+    // ─── UI state & Interactions ───────────────────────────────────────────
+    const uiState = {
+        showHud: true,
+        showWorldDebug: true,
+        hudConfig: {
+            show: {
+                position: true, zoom: true, mode: true, shake: true,
+                sequence: true, parallax: true, bounds: true,
+                deadzone: true, lookahead: true
+            },
+        },
+        customDir: {x: 0, y: 0},
+    };
+
+    // ─── Title card (Director mode) ───────────────────────────────────────
+    const titleCard = document.getElementById('title-card');
+    const titleLabel = document.getElementById('title-label');
+    const titleTitle = document.getElementById('title-title');
+    const titleDesc = document.getElementById('title-desc');
+
+    function showTitle(label, title, desc, ms = 2200) {
+        titleLabel.textContent = label;
+        titleTitle.textContent = title;
+        titleDesc.textContent = desc || '';
+        titleCard.classList.add('show');
+        setTimeout(() => titleCard.classList.remove('show'), ms);
+    }
+
+    // ─── Sequence helpers ────────────────────────────────────────────────
+    function runBossReveal() {
+        const seq = camera.createSequence({
+            onComplete: () => {
+                document.getElementById('seq-status').textContent = 'Idle.';
+            },
+        });
+        const startCenter = {
+            x: camera.pos[0] + camera.visibleW * 0.5,
+            y: camera.pos[1] + camera.visibleH * 0.5
+        };
+        seq.moveAndZoom(boss.x, boss.y, 1.7, 1100, {ease: easeInOutCubic})
+            .shake('heavy_impact')
+            .call(() => spawnParticles(boss.x, boss.y, 80, ['#ef4444', '#fbbf24', '#fff']))
+            .wait(900)
+            .moveAndZoom(startCenter.x, startCenter.y, 1.0, 1000, {ease: easeInOutCubic});
+        camera.playSequence(seq);
+        document.getElementById('seq-status').textContent = 'Playing: Boss Reveal';
+    }
+
+    function runPanToBoss() {
+        const seq = camera.createSequence({
+            onComplete: () => document.getElementById('seq-status').textContent = 'Idle.'
+        });
+        seq.moveTo(boss.x, boss.y, 1400, {ease: easeInOutCubic});
+        camera.playSequence(seq);
+        document.getElementById('seq-status').textContent = 'Playing: Pan To Boss';
+    }
+
+    function runDramaticZoom() {
+        const seq = camera.createSequence({
+            onComplete: () => document.getElementById('seq-status').textContent = 'Idle.'
+        });
+        seq.moveAndZoom(boss.x, boss.y, 2.4, 900, {ease: easeOutExpo})
+            .wait(400)
+            .shake('impact');
+        camera.playSequence(seq);
+        document.getElementById('seq-status').textContent = 'Playing: Dramatic Zoom';
+    }
+
+    function runCustomTour() {
+        const status = document.getElementById('seq-status');
+        const seq = camera.createSequence({onComplete: () => status.textContent = 'Idle.'});
+        seq.moveAndZoom(playerStart.x, playerStart.y, 1.0, 800)
+            .moveAndZoom(allyA.x, allyA.y, 1.4, 900)
+            .wait(300)
+            .shake('damage')
+            .moveAndZoom(allyB.x, allyB.y, 1.4, 900)
+            .wait(300)
+            .shake('damage')
+            .moveAndZoom(boss.x, boss.y, 1.8, 1200, {ease: easeInOutCubic})
+            .shake('explosion')
+            .call(() => spawnParticles(boss.x, boss.y, 60, ['#ef4444', '#fbbf24']))
+            .wait(800)
+            .moveAndZoom(playerStart.x, playerStart.y, 1.0, 1100, {ease: easeInOutCubic});
+        camera.playSequence(seq);
+        status.textContent = 'Playing: Custom Tour';
+    }
+
+    // ─── DIRECTOR — automated showcase ────────────────────────────────
+    let directorTimer = null;
+    let directorStops = [];
+
+    function clearDirector() {
+        directorStops.forEach(t => clearTimeout(t));
+        directorStops = [];
+        document.getElementById('btn-director').classList.remove('playing');
+        document.getElementById('btn-director').textContent = '▶ Run Director';
+    }
+
+    function schedule(delay, fn) {
+        directorStops.push(setTimeout(fn, delay));
+    }
+
+    function runDirector() {
+        if (directorStops.length > 0) {
+            clearDirector();
+            camera.stopSequence();
+            camera.clearShakes();
+            camera.trackSingle();
+            camera.setMode(FollowMode.SMOOTH);
+            camera.setZoom(1.0, 0.4);
+            return;
+        }
+
+        const btn = document.getElementById('btn-director');
+        btn.classList.add('playing');
+        btn.textContent = '■ Stop Director';
+
+        let t = 0;
+        const STEP = 3500;
+
+        // Reset everything
+        camera.clearShakes();
+        camera.trackSingle();
+        camera.setMode(FollowMode.SMOOTH);
+        camera.setZoom(1.0, 0.5);
+
+        // 1. Smooth follow
+        schedule(t, () => {
+            showTitle('CHAPTER 01', 'Smooth Follow', 'deadzone + lookahead · the default');
+            camera.setMode(FollowMode.SMOOTH);
+            syncControls();
+        });
+        t += STEP;
+
+        // 2. Predictive
+        schedule(t, () => {
+            showTitle('CHAPTER 02', 'Predictive Mode', 'velocity extrapolation · racing & runners');
+            camera.setMode(FollowMode.PREDICTIVE);
+            syncControls();
+        });
+        t += STEP;
+
+        // 3. Hybrid
+        schedule(t, () => {
+            showTitle('CHAPTER 03', 'Hybrid Mode', 'smooth X · locked Y · platformer standard');
+            camera.setMode(FollowMode.HYBRID);
+            syncControls();
+        });
+        t += STEP;
+
+        // 4. Lock
+        schedule(t, () => {
+            showTitle('CHAPTER 04', 'Lock Mode', 'instant snap · top-down shooters');
+            camera.setMode(FollowMode.LOCK);
+            syncControls();
+        });
+        t += STEP;
+
+        // 5. Multi-target
+        schedule(t, () => {
+            showTitle('CHAPTER 05', 'Multi-Target Framing', 'auto-zoom to keep allies in frame');
+            camera.setMode(FollowMode.SMOOTH);
+            camera.trackMultiple(multiTargets, {paddingX: 100, paddingY: 100, minZoom: 0.4, maxZoom: 1.6});
+            syncControls();
+        });
+        t += STEP;
+        schedule(t, () => {
+            // Spread allies for dramatic re-frame
+            allyA.x = playerStart.x - 600;
+            allyB.x = playerStart.x + 600;
+        });
+        t += 2000;
+
+        // 6. Shake demo
+        schedule(t, () => {
+            camera.trackSingle();
+            camera.setMode(FollowMode.SMOOTH);
+            showTitle('CHAPTER 06', 'Layered Shake', '8-slot pool · simplex noise · zero-GC');
+            syncControls();
+        });
+        t += 1400;
+        schedule(t, () => camera.shakePreset('rumble'));
+        t += 800;
+        schedule(t, () => {
+            camera.shakePreset('explosion');
+            spawnParticles(player.x, player.y, 30, ['#ef4444', '#fbbf24']);
+        });
+        t += 1200;
+        schedule(t, () => {
+            camera.shakePreset('recoil');
+            spawnParticles(player.x, player.y - 20, 16, ['#22d3ee', '#fff']);
+        });
+        t += 800;
+
+        // 7. Bounds
+        schedule(t, () => {
+            showTitle('CHAPTER 07', 'Smart Bounds', 'HARD · SOFT · ELASTIC · per-edge config');
+            camera.setBoundsType(BoundsType.SOFT);
+            document.getElementById('ctrl-bounds').value = '1';
+            document.getElementById('lbl-bounds').textContent = 'SOFT';
+        });
+        t += STEP;
+        schedule(t, () => {
+            camera.setBoundsType(BoundsType.ELASTIC);
+            document.getElementById('ctrl-bounds').value = '2';
+            document.getElementById('lbl-bounds').textContent = 'ELASTIC';
+        });
+        t += 2400;
+        schedule(t, () => {
+            camera.setBoundsType(BoundsType.HARD);
+            document.getElementById('ctrl-bounds').value = '0';
+            document.getElementById('lbl-bounds').textContent = 'HARD';
+        });
+
+        // 8. Boss reveal sequence
+        schedule(t, () => {
+            showTitle('CHAPTER 08', 'Cinematic Sequence', 'timeline-driven · GSAP-style positioning', 2600);
+            runBossReveal();
+        });
+        t += 4500;
+
+        // 9. Custom tour
+        schedule(t, () => {
+            showTitle('CHAPTER 09', 'Composed Cinematic', 'pan · zoom · shake · synchronized', 2400);
+            runCustomTour();
+        });
+        t += 7500;
+
+        // 10. Finale
+        schedule(t, () => {
+            showTitle('LITE-CAMERA·PRO', 'Production Ready', 'zero-GC · high performance', 3500);
+            camera.shakePreset('heavy_impact', 0.6);
+            spawnParticles(player.x, player.y, 60, ['#fbbf24', '#22d3ee', '#a78bfa', '#ef4444']);
+        });
+        t += 3500;
+
+        schedule(t, () => clearDirector());
+    }
+
+    // ─── Sync UI controls to current camera state ───────────────────
+    function syncControls() {
+        document.getElementById('ctrl-mode').value = camera.mode;
+        // Use enum lookup fallback for names
+        const names = ['SMOOTH', 'LOCK', 'PREDICTIVE', 'CUT', 'HYBRID'];
+        document.getElementById('lbl-mode').textContent = names[camera.mode];
+    }
+
+    // ─── UI WIRING ────────────────────────────────────────────────────────
+    // Panel collapse
+    document.querySelectorAll('.panel-header').forEach(h => {
+        h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
+    });
+
+    // Follow mode
+    const ctrlMode = document.getElementById('ctrl-mode');
+    ctrlMode.addEventListener('change', e => {
+        camera.setMode(parseInt(e.target.value));
+        const names = ['SMOOTH', 'LOCK', 'PREDICTIVE', 'CUT', 'HYBRID'];
+        document.getElementById('lbl-mode').textContent = names[camera.mode];
+    });
+
+    // Deadzone & lookahead sliders
+    function bindSlider(id, lblId, fn, fmt = v => v) {
+        const el = document.getElementById(id);
+        const lbl = document.getElementById(lblId);
+        el.addEventListener('input', () => {
+            const v = parseFloat(el.value);
+            fn(v);
+            lbl.textContent = fmt(v);
+        });
+    }
+
+    bindSlider('ctrl-dzx', 'lbl-dzx', v => camera.deadzoneX = v);
+    bindSlider('ctrl-dzy', 'lbl-dzy', v => camera.deadzoneY = v);
+    bindSlider('ctrl-look', 'lbl-look', v => camera.lookaheadDist = v);
+    bindSlider('ctrl-lerp', 'lbl-lerp', v => camera.lerpSpeed = v, v => v.toFixed(1));
+    bindSlider('ctrl-predict', 'lbl-predict', v => camera.predictTime = v, v => v.toFixed(2));
+
+    // Zoom
+    bindSlider('ctrl-zoom', 'lbl-zoom', v => {
+        const dur = parseFloat(document.getElementById('ctrl-zoomdur').value);
+        camera.setZoom(v, dur, easeOutExpo);
+    }, v => v.toFixed(2));
+    bindSlider('ctrl-zoomdur', 'lbl-zoomdur', () => {}, v => v.toFixed(2));
+
+    document.querySelectorAll('[data-zoom-preset]').forEach(b => {
+        b.addEventListener('click', () => {
+            const z = parseFloat(b.dataset.zoomPreset);
+            const dur = parseFloat(document.getElementById('ctrl-zoomdur').value);
+            camera.setZoom(z, dur, easeOutExpo);
+            document.getElementById('ctrl-zoom').value = z;
+            document.getElementById('lbl-zoom').textContent = z.toFixed(2);
+        });
+    });
+
+    // Shake presets
+    document.querySelectorAll('[data-preset]').forEach(b => {
+        b.addEventListener('click', () => {
+            camera.shakePreset(b.dataset.preset);
+            spawnParticles(player.x, player.y - 16, 20, ['#ef4444', '#fbbf24', '#fff']);
+        });
+    });
+
+    bindSlider('ctrl-trauma', 'lbl-trauma', () => {}, v => v.toFixed(2));
+    bindSlider('ctrl-freq', 'lbl-freq', () => {}, v => v.toFixed(0));
+    bindSlider('ctrl-decay', 'lbl-decay', () => {}, v => v.toFixed(1));
+    bindSlider('ctrl-offset', 'lbl-offset', () => {}, v => v.toFixed(0));
+    bindSlider('ctrl-angle', 'lbl-angle', () => {}, v => v.toFixed(3));
+
+    document.querySelectorAll('#dir-pad button').forEach(b => {
+        b.addEventListener('click', () => {
+            document.querySelectorAll('#dir-pad button').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            uiState.customDir.x = parseInt(b.dataset.dx);
+            uiState.customDir.y = parseInt(b.dataset.dy);
+            const lbl = uiState.customDir.x === 0 && uiState.customDir.y === 0
+                ? 'omni' : `${uiState.customDir.x}, ${uiState.customDir.y}`;
+            document.getElementById('lbl-dir').textContent = lbl;
+        });
+    });
+
+    document.getElementById('btn-fire-custom').addEventListener('click', () => {
+        camera.shake({
+            trauma: parseFloat(document.getElementById('ctrl-trauma').value),
+            freq: parseInt(document.getElementById('ctrl-freq').value),
+            decay: parseFloat(document.getElementById('ctrl-decay').value),
+            maxOffset: parseInt(document.getElementById('ctrl-offset').value),
+            maxAngle: parseFloat(document.getElementById('ctrl-angle').value),
+            dirX: uiState.customDir.x,
+            dirY: uiState.customDir.y,
+        });
+        spawnParticles(player.x, player.y, 12, ['#fbbf24']);
+    });
+
+    document.getElementById('btn-clear-shake').addEventListener('click', () => camera.clearShakes());
+
+    // Sequences
+    document.getElementById('btn-seq-pan').addEventListener('click', runPanToBoss);
+    document.getElementById('btn-seq-zoom').addEventListener('click', runDramaticZoom);
+    document.getElementById('btn-seq-boss').addEventListener('click', runBossReveal);
+    document.getElementById('btn-seq-tour').addEventListener('click', runCustomTour);
+    document.getElementById('btn-seq-stop').addEventListener('click', () => {
+        camera.stopSequence();
+        document.getElementById('seq-status').textContent = 'Idle.';
+    });
+
+    // Multi-target
+    const btnMt = document.getElementById('btn-mt-toggle');
+    btnMt.addEventListener('click', () => {
+        if (camera._mt.active) {
+            camera.trackSingle();
+            btnMt.classList.remove('on');
+        } else {
+            camera.trackMultiple(multiTargets, {
+                paddingX: parseInt(document.getElementById('ctrl-mt-pad').value),
+                paddingY: parseInt(document.getElementById('ctrl-mt-pad').value),
+                minZoom: parseFloat(document.getElementById('ctrl-mt-min').value),
+                maxZoom: parseFloat(document.getElementById('ctrl-mt-max').value),
+                zoomSpeed: parseFloat(document.getElementById('ctrl-mt-zs').value),
+            });
+            btnMt.classList.add('on');
+        }
+    });
+
+    bindSlider('ctrl-mt-pad', 'lbl-mt-pad', v => {
+        camera._mt.paddingX = v;
+        camera._mt.paddingY = v;
+    });
+    bindSlider('ctrl-mt-zs', 'lbl-mt-zs', v => camera._mt.zoomSpeed = v, v => v.toFixed(1));
+    bindSlider('ctrl-mt-min', 'lbl-mt-min', v => camera._mt.minZoom = v, v => v.toFixed(2));
+    bindSlider('ctrl-mt-max', 'lbl-mt-max', v => camera._mt.maxZoom = v, v => v.toFixed(2));
+
+    // Drag allies (simple grab)
+    let dragging = null;
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        camera.screenToWorld(sx, sy, tmpVec);
+
+        for (const a of [allyA, allyB]) {
+            const dx = tmpVec.x - a.x, dy = tmpVec.y - a.y;
+            if (dx * dx + dy * dy < 30 * 30) {
+                dragging = a;
+                e.stopPropagation();
+                break;
+            }
+        }
+    });
+    canvas.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        camera.screenToWorld(sx, sy, tmpVec);
+        dragging.x = tmpVec.x;
+        dragging.y = tmpVec.y;
+    });
+    window.addEventListener('mouseup', () => {
+        dragging = null;
+    });
+
+    // Bounds
+    document.getElementById('ctrl-bounds').addEventListener('change', e => {
+        const t = parseInt(e.target.value);
+        camera.setBoundsType(t);
+        const names = ['HARD', 'SOFT', 'ELASTIC', 'NONE'];
+        document.getElementById('lbl-bounds').textContent = names[t];
+    });
+    bindSlider('ctrl-softzone', 'lbl-softzone', v => camera._bounds.softZone = v);
+    bindSlider('ctrl-elastic', 'lbl-elastic', v => camera._bounds.elasticMax = v);
+
+    const btnRect = document.getElementById('btn-bounds-rect');
+    btnRect.addEventListener('click', () => {
+        if (camera._bounds.customBounds) {
+            camera.clearBoundsRect();
+            btnRect.classList.remove('on');
+        } else {
+            camera.setBoundsRect(WORLD_W * 0.5 - 600, WORLD_H * 0.5 - 500, 1200, 1000);
+            btnRect.classList.add('on');
+        }
+    });
+
+    // Parallax toggles
+    function bindParallax(cbId, layerId, sx) {
+        const cb = document.getElementById(cbId);
+        cb.addEventListener('change', () => {
+            if (cb.checked) camera.addParallaxLayer(layerId, sx);
+            else camera.removeParallaxLayer(layerId);
+        });
+    }
+
+    bindParallax('cb-sky', 'stars', 0.05);
+    bindParallax('cb-mountains', 'mountains', 0.20);
+    bindParallax('cb-hills', 'hills', 0.50);
+    bindParallax('cb-fog', 'fog', 0.75);
+    bindParallax('cb-fg', 'foreground', 1.30);
+
+    // Debug toggles
+    document.getElementById('cb-hud').addEventListener('change', e => uiState.showHud = e.target.checked);
+    document.getElementById('cb-world').addEventListener('change', e => uiState.showWorldDebug = e.target.checked);
+    document.getElementById('cb-hud-pos').addEventListener('change', e => uiState.hudConfig.show.position = e.target.checked);
+    document.getElementById('cb-hud-shake').addEventListener('change', e => uiState.hudConfig.show.shake = e.target.checked);
+    document.getElementById('cb-hud-seq').addEventListener('change', e => uiState.hudConfig.show.sequence = e.target.checked);
+    document.getElementById('cb-hud-pllx').addEventListener('change', e => uiState.hudConfig.show.parallax = e.target.checked);
+
+    // Director
+    document.getElementById('btn-director').addEventListener('click', runDirector);
+
+    // Initial sync
+    syncControls();
+    updateHeaderStats();
+</script>
+
+</body>
+</html>
