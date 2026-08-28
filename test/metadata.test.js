@@ -8,7 +8,7 @@
 // =============================================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as api from '../src/index.js';
@@ -63,4 +63,50 @@ test('CP-1: every llms.txt-documented standalone export exists on the entry', ()
     // The two the BRIEF flagged, specifically, as functions.
     assert.equal(typeof api.createShakeState, 'function');
     assert.equal(typeof api.createMultiTargetState, 'function');
+});
+
+// -- CP-16a / CP-17: subpath exports-map invariants (v1.1.0) -------------------
+// The "." entry keeps its exact 1.0.1 shape; every subpath's runtime target
+// (import/default/node) AND its types target resolve to a real file on disk;
+// the "./package.json" convenience subpath is present.
+
+const EXPECTED_SUBPATHS = [
+    '.', './shake', './parallax', './bounds', './multi', './follow',
+    './sequence', './package.json',
+];
+
+test('exports map lists exactly the expected subpaths', () => {
+    const keys = Object.keys(pkg.exports).sort();
+    assert.deepEqual(keys, [...EXPECTED_SUBPATHS].sort());
+});
+
+test('"." entry is unchanged from the 1.0.1 shape', () => {
+    assert.deepEqual(pkg.exports['.'], {
+        types: './src/index.d.ts',
+        node: './src/index.js',
+        import: './src/index.js',
+        default: './src/index.js',
+    });
+});
+
+test('every subpath runtime + types target exists on disk; types is declared first', () => {
+    for (const key of Object.keys(pkg.exports)) {
+        const entry = pkg.exports[key];
+        if (typeof entry === 'string') {
+            // "./package.json" is a bare string target.
+            assert.ok(existsSync(join(root, entry)), key + ' target missing: ' + entry);
+            continue;
+        }
+        // "types" condition must be declared FIRST (TypeScript requirement).
+        assert.equal(Object.keys(entry)[0], 'types', key + ' must list "types" first');
+        for (const cond of ['types', 'node', 'import', 'default']) {
+            const target = entry[cond];
+            assert.ok(target, key + ' is missing the "' + cond + '" condition');
+            assert.ok(existsSync(join(root, target)), key + ' ' + cond + ' target missing: ' + target);
+        }
+    }
+});
+
+test('"./package.json" subpath is present and self-referential', () => {
+    assert.equal(pkg.exports['./package.json'], './package.json');
 });

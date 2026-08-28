@@ -1,7 +1,7 @@
 {
   "name": "@zakkster/lite-camera-pro",
   "author": "Zahary Shinikchiev <shinikchiev@yahoo.com>",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Cinematic camera system for Canvas2D games. Zero-GC, multi-target framing, noise-based shake, and timeline sequences.",
   "type": "module",
   "sideEffects": false,
@@ -13,7 +13,44 @@
       "node": "./src/index.js",
       "import": "./src/index.js",
       "default": "./src/index.js"
-    }
+    },
+    "./shake": {
+      "types": "./src/Shake.d.ts",
+      "node": "./src/Shake.js",
+      "import": "./src/Shake.js",
+      "default": "./src/Shake.js"
+    },
+    "./parallax": {
+      "types": "./src/ParallaxManager.d.ts",
+      "node": "./src/ParallaxManager.js",
+      "import": "./src/ParallaxManager.js",
+      "default": "./src/ParallaxManager.js"
+    },
+    "./bounds": {
+      "types": "./src/BoundsSystem.d.ts",
+      "node": "./src/BoundsSystem.js",
+      "import": "./src/BoundsSystem.js",
+      "default": "./src/BoundsSystem.js"
+    },
+    "./multi": {
+      "types": "./src/MultiTarget.d.ts",
+      "node": "./src/MultiTarget.js",
+      "import": "./src/MultiTarget.js",
+      "default": "./src/MultiTarget.js"
+    },
+    "./follow": {
+      "types": "./src/FollowMode.d.ts",
+      "node": "./src/FollowMode.js",
+      "import": "./src/FollowMode.js",
+      "default": "./src/FollowMode.js"
+    },
+    "./sequence": {
+      "types": "./src/CameraSequence.d.ts",
+      "node": "./src/CameraSequence.js",
+      "import": "./src/CameraSequence.js",
+      "default": "./src/CameraSequence.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "src/",
@@ -50,15 +87,17 @@
     "@zakkster/lite-gc-profiler": "^1.16.0",
     "@zakkster/lite-leak": "^1.10.0",
     "@zakkster/lite-signal": "^1.5.0",
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "typescript": "7.0.2"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
     "test:gc": "node --expose-gc --test test/*.test.js",
     "torture": "node --expose-gc test/torture.mjs",
-    "verify": "npm run test:gc && npm run torture",
+    "verify": "npm run test:gc && npm run torture && node test/size.mjs",
+    "typecheck": "tsc -p test/types-smoke/tsconfig.json",
     "bundle-check": "esbuild ./src/index.js --bundle --format=esm --outfile=test-bundle.js",
-    "prepublishOnly": "npm run verify && npm run bundle-check"
+    "prepublishOnly": "npm run verify && npm run typecheck && npm run bundle-check"
   },
   "keywords": [
     "camera",

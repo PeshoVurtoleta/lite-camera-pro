@@ -6,7 +6,7 @@
 > with presets, fluent timeline sequences, a 16-layer parallax manager, per-edge
 > bounds, a debug HUD, and zero-alloc coordinate conversion.
 
-Version: 1.0.1
+Version: 1.1.0
 
 ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
 CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
@@ -108,6 +108,19 @@ Bounds:   createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearB
 Multi:    createMultiTargetState, updateMultiTarget
 Sequence: createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake
 Enums:    FollowMode, FOLLOW_STRATEGIES, BoundsType, WrapMode
+
+## Subpath exports (import only what you use; gz, esm, unminified, gzip -9)
+Beside the "." main entry, six subsystem subpaths + "./package.json". Same runtime
+identities as the main entry (one engine, no fork). Per-subpath gz weight:
+  ./shake     2.82 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
+  ./parallax  0.89 KB  createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode
+  ./bounds    1.13 KB  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, BoundsType
+  ./multi     0.89 KB  createMultiTargetState, updateMultiTarget
+  ./follow    0.71 KB  FollowMode, FOLLOW_STRATEGIES
+  ./sequence  5.94 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake  (drags lite-timeline + lite-ease by design -- the only subpath that does)
+  .           21.70 KB full class + functional layer
+Self-reference example (shake only):
+  import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
 
 ## Dependencies (all @zakkster, first-party)
 @zakkster/lite-camera (base CinematicCamera), lite-ease, lite-lerp, lite-noise, lite-timeline.

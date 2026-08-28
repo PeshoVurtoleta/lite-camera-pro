@@ -20,6 +20,13 @@
 npm install @zakkster/lite-camera-pro
 ```
 
+Need only screen shake? Import the `./shake` subpath and pull just the engine +
+presets (2.82 KB gz -- esm, unminified, gzip -9):
+
+```js
+import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
+```
+
 ---
 
 ## Why Pro?

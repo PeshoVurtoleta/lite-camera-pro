@@ -6,6 +6,53 @@ Versioning. Version lives in three places at once -- `package.json`, the
 `VERSION` const in `src/index.js`, and the `Version:` header in `llms.txt` --
 bumped together or not at all.
 
+## [1.1.0] -- 2026-08-26
+
+Subpath exports. A consumer who needs only screen shake now imports
+`@zakkster/lite-camera-pro/shake` and pays for the shake engine plus its
+tree-shaken noise sampler -- nothing else. No runtime behavior changed: the hot
+bodies (`computeShake`, `updateShake`, `apply`, `updateParallax`, `applyBounds`,
+`updateMultiTarget`) are byte-identical, and the camera class imports the same
+module files the subpaths expose (one engine, no fork -- proven by the T8
+Object.is identity check).
+
+Measured: the Las Vegas scratch-card consumer (BRIEF.md) reported a 73.5 KB gz
+whole-package pull for a three-tier win-shake ramp that touches only the shake
+API. Through `@zakkster/lite-camera-pro/shake` the same integration measures
+**2.82 KB gz** (2,883 B; 8.79 KB raw, esbuild esm, minify=false, gzip -9) --
+about **26x smaller**. Of that bundle, lite-noise's `Noise.js` contributes
+2,009 B (5.1% of its 39,613 B source), so tree-shaking through the noise
+dependency works as intended.
+
+### Added
+
+- **Subpath exports map.** Seven entries beside `.`: `./shake`, `./parallax`,
+  `./bounds`, `./multi`, `./follow`, `./sequence`, and `./package.json`. Each
+  runtime entry carries a sibling `types` condition (declared first, per the
+  TypeScript exports-map requirement). Per-subpath gz weights (esm, unminified,
+  gzip -9): `./shake` 2.82 KB, `./parallax` 0.89 KB, `./bounds` 1.13 KB,
+  `./multi` 0.89 KB, `./follow` 0.71 KB, `./sequence` 5.94 KB, `.` 21.70 KB.
+  `./sequence` drags `@zakkster/lite-timeline` + `@zakkster/lite-ease` by design
+  -- it is the only subpath that does.
+- **`src/Shake.js` barrel.** A two-line re-export over `ShakeEngine.js` +
+  `ShakePresets.js` (never a copy), so a shake-only consumer gets the engine,
+  the presets, and `getPreset`/`registerPreset`/`listPresets` from one import.
+- **Typed functional layer (CP-16a).** `src/index.d.ts` now re-exports six
+  per-subsystem sibling declarations (`Shake.d.ts`, `ParallaxManager.d.ts`,
+  `BoundsSystem.d.ts`, `MultiTarget.d.ts`, `FollowMode.d.ts`,
+  `CameraSequence.d.ts`), each declaring its module's complete runtime surface
+  -- state interfaces, enums, defaults, no `any`. The standalone functions are
+  now visible and typed at the main entry, not just the class.
+- **Size gate.** `test/size.mjs` bundles every subpath with the esbuild JS API
+  and asserts `./shake` gz stays at or under the fixed 16,384 B charter budget.
+  Wired into `npm run verify`.
+- **Dependency decision record (CP-17).** `decisions/0001-layout-and-deps.md`
+  documents the multi-file layout and the five first-party runtime deps, with
+  per-dep floor evidence. Repo-only; not shipped in the tarball.
+- **TypeScript smoke.** `test/types-smoke/smoke.ts` exercises every subpath plus
+  the main entry under `strict` + `noImplicitAny` + node16 resolution;
+  `npm run typecheck` runs it and joins `prepublishOnly`.
+
 ## [1.0.1] -- 2026-08-25
 
 Foundation release: make the suite run, gate it, and land the fixes that cost
