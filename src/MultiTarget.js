@@ -15,6 +15,14 @@
  *
  * Mutates cam.target[], cam.zoom directly. Zero allocations.
  *
+ * Count contract (caller-owned, standalone ./multi callers included): count
+ * must satisfy 0 <= count <= targets.length and every targets[0..count-1] must
+ * be an object with finite x/y. This loop reads targets[0..count-1] without
+ * per-frame validation (zero-GC hot path) -- an out-of-range count or a garbage
+ * entry is undefined behavior here. The CinematicCameraPro facade enforces the
+ * contract at its trackMultiple/setTargetCount doors (ERR_CAMERA_TARGETS);
+ * direct callers of this function own that guarantee themselves.
+ *
  * @param {CinematicCameraPro} cam       The camera instance
  * @param {number}             dt        Delta time in seconds
  * @param {{x:number,y:number}[]} targets  Array of target objects

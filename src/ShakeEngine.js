@@ -129,16 +129,34 @@ function acquireSlot(state) {
  * @param {number} [profile.intensity=1] Scale multiplier for the profile
  */
 export function addShake(state, profile, intensity = 1) {
-    // CP-14 + H-F (fail closed): validate trauma/intensity in this COLD entry so
-    // the per-frame updateShake/computeShake loops gain zero new branches.
-    //   - trauma undefined -> 0.5 (documented default)
-    //   - trauma or intensity non-finite (NaN/Inf) -> activate NOTHING, return
-    //     early. The old `profile.trauma || 0.5` laundered NaN to 0.5, opening a
-    //     poison door: a single NaN shake would drive every later frame to NaN.
-    //     null is not zero; an unverified number does not get a default.
+    // CP-14 + CP-3 + H-F (fail closed): validate the WHOLE profile in this COLD
+    // entry so the per-frame updateShake/computeShake loops gain zero new
+    // branches. Every numeric is resolved to its documented default FIRST (the
+    // `!== undefined ? : default` form -- including dirX/dirY, replacing the old
+    // `|| 0` that laundered a NaN direction to 0), then one combined finiteness
+    // check activates NOTHING and returns BEFORE acquireSlot on any failure:
+    //   - trauma undefined -> 0.5; a non-finite trauma/intensity fires nothing.
+    //     The old `profile.trauma || 0.5` laundered NaN to 0.5, a poison door.
+    //   - decay/freq/maxOffset/maxAngle/dirX/dirY non-finite -> reject too. A
+    //     NaN decay would leave the slot's trauma <= 0 test false forever, so
+    //     the slot never deactivates (CP-3 via a poisoned profile).
+    //   - null is not zero; an unverified number does not get a default.
     //   - resulting trauma <= 0 -> inert (a zero-trauma shake fires nothing).
+    // Valid, all-finite profiles resolve to the SAME slot values as before --
+    // only the ORDER of the default resolution moved (H-A).
     const rawTrauma = profile.trauma === undefined ? 0.5 : profile.trauma;
-    if (!Number.isFinite(rawTrauma) || !Number.isFinite(intensity)) return;
+    const decay = profile.decay !== undefined ? profile.decay : 1.0;
+    const freq = profile.freq !== undefined ? profile.freq : 15;
+    const maxOffset = profile.maxOffset !== undefined ? profile.maxOffset : 15;
+    const maxAngle = profile.maxAngle !== undefined ? profile.maxAngle : 0.05;
+    const dirX = profile.dirX !== undefined ? profile.dirX : 0;
+    const dirY = profile.dirY !== undefined ? profile.dirY : 0;
+
+    if (!Number.isFinite(rawTrauma) || !Number.isFinite(intensity) ||
+        !Number.isFinite(decay) || !Number.isFinite(freq) ||
+        !Number.isFinite(maxOffset) || !Number.isFinite(maxAngle) ||
+        !Number.isFinite(dirX) || !Number.isFinite(dirY)) return;
+
     const trauma = Math.min(1, rawTrauma * intensity);
     if (trauma <= 0) return;
 
@@ -147,22 +165,20 @@ export function addShake(state, profile, intensity = 1) {
     slot.active = true;
     slot.isDefault = false;
     slot.trauma = trauma;
-    slot.decay = profile.decay !== undefined ? profile.decay : 1.0;
-    slot.freq = profile.freq !== undefined ? profile.freq : 15;
-    slot.maxOffset = profile.maxOffset !== undefined ? profile.maxOffset : 15;
-    slot.maxAngle = profile.maxAngle !== undefined ? profile.maxAngle : 0.05;
+    slot.decay = decay;
+    slot.freq = freq;
+    slot.maxOffset = maxOffset;
+    slot.maxAngle = maxAngle;
     slot.time = 0; // reset time for fresh noise sampling
 
-    // Directional
-    const dx = profile.dirX || 0;
-    const dy = profile.dirY || 0;
-    slot.isDirectional = (dx !== 0 || dy !== 0);
+    // Directional. dirX/dirY are already resolved + finite-checked above.
+    slot.isDirectional = (dirX !== 0 || dirY !== 0);
 
     if (slot.isDirectional) {
         // Normalize direction
-        const len = Math.sqrt(dx * dx + dy * dy);
-        slot.dirX = dx / len;
-        slot.dirY = dy / len;
+        const len = Math.sqrt(dirX * dirX + dirY * dirY);
+        slot.dirX = dirX / len;
+        slot.dirY = dirY / len;
     } else {
         slot.dirX = 0;
         slot.dirY = 0;
@@ -220,6 +236,14 @@ export function addTraumaSimple(state, amount) {
  * @param {number} dt    Delta time in seconds
  */
 export function updateShake(state, dt) {
+    // CP-3 + H-C (fail closed): a non-finite or negative dt is rejected as a
+    // no-op in this entry so the per-slot loop below stays branch-for-branch
+    // unchanged. A NaN dt would drive s.time/s.trauma to NaN, the trauma <= 0
+    // test would never fire, and computeShake would emit NaN forever. No maxDt
+    // clamp here: a large finite dt is self-limiting (trauma decays past 0, the
+    // slot deactivates in one step). cam.update() hands an already-clamped dt.
+    if (!Number.isFinite(dt) || dt < 0) return;
+
     let anyActive = false;
 
     for (let i = 0; i < state.slotCount; i++) {

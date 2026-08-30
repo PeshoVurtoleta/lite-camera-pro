@@ -12,12 +12,32 @@
  */
 
 import { GcProfiler, checkNoGc } from '@zakkster/lite-gc-profiler';
+import { createShakeState, computeShake } from '../../src/index.js';
 import { die } from './harness.mjs';
 
 /** Retained sink so the control's allocations survive GC (heapUsed grows). */
 const leak = [];
 
 export async function run() {
+    // D-i doors-disabled control: prove the T1 / regressions finite-check
+    // detector is NOT vacuous. Hand-poison a shake state the way the pre-door
+    // engine could be driven -- an active slot carrying NaN trauma with the
+    // state marked active -- run computeShake, and confirm the detector
+    // predicate (Number.isFinite on state.offsetX) FLAGS it. If a poisoned
+    // state slipped past as finite, every T1/regressions offsetX check would be
+    // decorative, so a finite result here is itself a gate failure.
+    {
+        const poisoned = createShakeState();
+        poisoned.slots[0].active = true;
+        poisoned.slots[0].trauma = NaN;
+        poisoned.active = true;
+        computeShake(poisoned);
+        if (Number.isFinite(poisoned.offsetX)) {
+            die('T9 doors-disabled control: a NaN-trauma active slot produced a FINITE ' +
+                'offsetX -- the T1/regressions finite-check detector is vacuous');
+        }
+    }
+
     // Control: a hot body that RETAINS an allocation every iteration must be
     // rejected by the same gate T6 uses (maxMajor:0). Retaining ~2 KB per
     // iteration over 120k iterations is ~240 MB of surviving garbage -- V8 is

@@ -6,7 +6,7 @@
 > with presets, fluent timeline sequences, a 16-layer parallax manager, per-edge
 > bounds, a debug HUD, and zero-alloc coordinate conversion.
 
-Version: 1.1.0
+Version: 1.2.0
 
 ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
 CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
@@ -112,18 +112,57 @@ Enums:    FollowMode, FOLLOW_STRATEGIES, BoundsType, WrapMode
 ## Subpath exports (import only what you use; gz, esm, unminified, gzip -9)
 Beside the "." main entry, six subsystem subpaths + "./package.json". Same runtime
 identities as the main entry (one engine, no fork). Per-subpath gz weight:
-  ./shake     2.82 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
+  ./shake     3.01 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
   ./parallax  0.89 KB  createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode
   ./bounds    1.13 KB  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, BoundsType
   ./multi     0.89 KB  createMultiTargetState, updateMultiTarget
   ./follow    0.71 KB  FollowMode, FOLLOW_STRATEGIES
-  ./sequence  5.94 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake  (drags lite-timeline + lite-ease by design -- the only subpath that does)
-  .           21.70 KB full class + functional layer
+  ./sequence  6.01 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake  (drags lite-timeline + lite-ease by design -- the only subpath that does)
+  .           23.19 KB full class + functional layer
 Self-reference example (shake only):
   import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
 
 ## Dependencies (all @zakkster, first-party)
 @zakkster/lite-camera (base CinematicCamera), lite-ease, lite-lerp, lite-noise, lite-timeline.
+
+## Fail-closed doors (1.2.0)
+Ordinary runtime garbage (a NaN dt, a frame-time spike, a bad save file) can no longer
+break the render at frame N+1. Setters validate at the call; the update path validates at
+its entry; every unverified numeric fails loud or is a documented no-op. Hot bodies pay
+nothing (the doors are two comparisons on the update path; errors build only on cold throws).
+
+dt policy (cam.update(dt, ...) and standalone updateShake(state, dt)):
+- Non-finite (NaN/+-Infinity/null) or negative dt -> documented no-op, nothing mutated.
+- dt 0 and -0 -> legal no-advance frames (zero deltas everywhere).
+- cam.update clamps a finite dt above cam.maxDt (default 0.1s, a plain tunable) to cam.maxDt;
+  a dt exactly == maxDt passes untouched. updateShake is reject-only (no maxDt; a large finite
+  dt is self-limiting). Set cam.maxDt directly to retune; it is not validated per frame.
+
+Shake profiles (cam.shake / addShake): every numeric (trauma, decay, freq, maxOffset,
+maxAngle, dirX, dirY) is resolved to its default then finiteness-checked in the cold entry;
+a non-finite field activates NO slot (a NaN decay would otherwise leave a slot alive forever).
+
+Error codes (all throw a house-style Error with a .code):
+- ERR_CAMERA_MODE     setMode(mode): mode must be an integer FollowMode in [0, 4].
+- ERR_CAMERA_STATE    setState(snapshot): non-null object; posX/posY both-or-neither,
+                      targetX/targetY both-or-neither; every present numeric finite; zoom
+                      finite then clamped (zoom 0 -> minZoom 0.25, not an error); mode an
+                      integer FollowMode in range. Validated in full before any write
+                      (a rejected snapshot mutates nothing). Snapshot is pose-only
+                      (pos/target/zoom/mode) -- shake, sequences, zoom animations are not
+                      serialized.
+- ERR_CAMERA_ZOOM     setZoom(level, duration): level finite; duration finite and >= 0
+                      (0 = instant). zoomAt: anchor x/y, level, duration finite (>= 0);
+                      a non-function ease normalizes to null (both call forms).
+- ERR_CAMERA_TARGETS  trackMultiple(targets): array; every entry an object with finite x/y
+                      (validated at call time; empty array legal, count 0). setTargetCount(n):
+                      integer in [0, targets.length].
+- ERR_SHAKE_PRESET    registerPreset(name, profile): non-empty string name + object profile
+                      (setup path fails loud).
+- ERR_CAMERA_DESTROYED  every public method after destroy() (1.0.1).
+getPreset(name): a non-string or unknown name returns null (never throws) -- the event path.
+cam.shakePreset(name): an unknown or non-string name is a no-op returning this; use
+listPresets() to enumerate valid names.
 
 ## Notes
 - Migration: CinematicCameraPro is a drop-in superset of lite-camera's CinematicCamera.

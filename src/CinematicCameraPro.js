@@ -101,6 +101,13 @@ export class CinematicCameraPro extends CinematicCamera {
         // ── Hybrid mode config ──
         this.hybridVerticalSnap = true; // true = instant, false = fast lerp
 
+        // -- dt policy tunable (see decisions/0002-dt-policy.md) --
+        // update() clamps a finite dt above this ceiling before integrating, so
+        // a frame-time spike cannot diverge the position lerp (CP-4). Plain knob,
+        // not a per-frame-validated input -- writing garbage here is out of
+        // contract (D-f). A dt exactly == maxDt passes unclamped (H-D).
+        this.maxDt = 0.1; // seconds
+
         // ── Multi-target framing ──
         this._mt = createMultiTargetState();
 
@@ -136,6 +143,14 @@ export class CinematicCameraPro extends CinematicCamera {
      * camera.setMode(FollowMode.PREDICTIVE);
      */
     setMode(mode) {
+        // Fail-closed door (CP-12): an out-of-range mode makes the update()
+        // strategy lookup undefined and crashes at frame N+1 with a raw
+        // TypeError. Reject at the setter with a named error instead.
+        if (!Number.isInteger(mode) || mode < 0 || mode >= FOLLOW_STRATEGIES.length) {
+            const e = new Error("CinematicCameraPro: setMode(mode) requires an integer FollowMode in [0, " + (FOLLOW_STRATEGIES.length - 1) + "]");
+            e.code = "ERR_CAMERA_MODE";
+            throw e;
+        }
         this.mode = mode;
         return this;
     }
@@ -167,6 +182,25 @@ export class CinematicCameraPro extends CinematicCamera {
      * camera.trackSingle();
      */
     trackMultiple(targets, options) {
+        // Fail-closed door (CP-19). Validate the array and every entry at CALL
+        // time -- a garbage target would otherwise crash updateMultiTarget at
+        // frame N+1 reading .x on undefined. Live mutation of the array/entries
+        // after this call is out of contract (no per-frame validation, H-C).
+        // An empty array is legal (count 0; update skips).
+        if (!Array.isArray(targets)) {
+            const e = new Error("CinematicCameraPro: trackMultiple(targets) requires an array");
+            e.code = "ERR_CAMERA_TARGETS";
+            throw e;
+        }
+        for (let i = 0; i < targets.length; i++) {
+            const t = targets[i];
+            if (t === null || typeof t !== 'object' || !Number.isFinite(t.x) || !Number.isFinite(t.y)) {
+                const e = new Error("CinematicCameraPro: trackMultiple targets[" + i + "] must be an object with finite x and y");
+                e.code = "ERR_CAMERA_TARGETS";
+                throw e;
+            }
+        }
+
         const mt = this._mt;
         mt.active = true;
         mt.targets = targets;
@@ -209,7 +243,17 @@ export class CinematicCameraPro extends CinematicCamera {
      * @returns {CinematicCameraPro} this
      */
     setTargetCount(count) {
-        this._mt.count = count;
+        // Fail-closed door (CP-19). count must be an integer in [0, targets
+        // length]; an over-count would make updateMultiTarget read past the
+        // array end and crash at frame N+1. n=0 with null targets is legal.
+        const mt = this._mt;
+        const max = mt.targets ? mt.targets.length : 0;
+        if (!Number.isInteger(count) || count < 0 || count > max) {
+            const e = new Error("CinematicCameraPro: setTargetCount(count) must be an integer in [0, " + max + "]");
+            e.code = "ERR_CAMERA_TARGETS";
+            throw e;
+        }
+        mt.count = count;
         return this;
     }
 
@@ -261,6 +305,10 @@ export class CinematicCameraPro extends CinematicCamera {
      *
      * Built-in presets: explosion, earthquake, recoil, impact,
      * landing, damage, rumble, heavy_impact.
+     *
+     * Fail-closed (CP-12/CP-19): an unknown name OR a non-string name is a
+     * documented no-op -- getPreset returns null, nothing is activated, and
+     * `this` is returned. Use listPresets() to enumerate valid names.
      *
      * @param {string} name       Preset name (case-insensitive)
      * @param {number} [intensity=1] Scale multiplier
@@ -491,6 +539,20 @@ export class CinematicCameraPro extends CinematicCamera {
      * camera.setZoom(2.0, 0.5, easeOutExpo);
      */
     setZoom(level, duration = 0, ease = null) {
+        // Fail-closed door (CP-12). Finiteness precedes the clamp: clamp(NaN)
+        // returns NaN, so a NaN level would sail past the clamp and poison the
+        // zoom (F5). A non-finite or negative duration is defective input --
+        // duration 0 stays instant.
+        if (!Number.isFinite(level)) {
+            const e = new Error("CinematicCameraPro: setZoom(level) requires a finite number");
+            e.code = "ERR_CAMERA_ZOOM";
+            throw e;
+        }
+        if (!Number.isFinite(duration) || duration < 0) {
+            const e = new Error("CinematicCameraPro: setZoom duration must be a finite number >= 0");
+            e.code = "ERR_CAMERA_ZOOM";
+            throw e;
+        }
         level = clamp(level, this.minZoom, this.maxZoom);
 
         if (duration <= 0) {
@@ -533,27 +595,44 @@ export class CinematicCameraPro extends CinematicCamera {
      * camera.zoomAt(boss, 1.8, 0.8, easeOutExpo);
      */
     zoomAt(targetOrX, yOrLevel, levelOrDur, duration = 0, ease = null) {
-        let level, dur, easeFn;
+        // Fail-closed door (CP-12/CP-19). Resolve BOTH call forms into locals,
+        // validate them, and ONLY THEN write any this._ state -- a rejected call
+        // must mutate nothing. .x/.y are read and validated at CALL time only
+        // (live anchor mutation afterwards is out of contract). Finiteness
+        // precedes the clamp (F5). A non-function ease normalizes to null in
+        // both forms -- the static form gains it, closing a frame-N+1
+        // "this._zoomEase is not a function" crash.
+        let target, anchorX, anchorY, level, dur, easeFn;
 
         if (typeof targetOrX === 'object' && targetOrX !== null) {
             // zoomAt(target, level, duration, ease)
-            this._zoomTarget = targetOrX;
-            this._zoomAnchorX = targetOrX.x;
-            this._zoomAnchorY = targetOrX.y;
+            target = targetOrX;
+            anchorX = targetOrX.x;
+            anchorY = targetOrX.y;
             level = yOrLevel;
-            dur = levelOrDur || 0;
+            dur = levelOrDur !== undefined ? levelOrDur : 0;
             easeFn = duration; // shifted arg position — duration slot holds ease
-            if (typeof easeFn !== 'function') easeFn = null;
         } else {
             // zoomAt(x, y, level, duration, ease)
-            this._zoomTarget = null;
-            this._zoomAnchorX = targetOrX;
-            this._zoomAnchorY = yOrLevel;
+            target = null;
+            anchorX = targetOrX;
+            anchorY = yOrLevel;
             level = levelOrDur;
             dur = duration;
             easeFn = ease;
         }
+        if (typeof easeFn !== 'function') easeFn = null;
 
+        if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY) ||
+            !Number.isFinite(level) || !Number.isFinite(dur) || dur < 0) {
+            const e = new Error("CinematicCameraPro: zoomAt requires finite anchor x/y, a finite level, and a finite duration >= 0");
+            e.code = "ERR_CAMERA_ZOOM";
+            throw e;
+        }
+
+        this._zoomTarget = target;
+        this._zoomAnchorX = anchorX;
+        this._zoomAnchorY = anchorY;
         this._hasAnchor = true;
         level = clamp(level, this.minZoom, this.maxZoom);
 
@@ -658,6 +737,15 @@ export class CinematicCameraPro extends CinematicCamera {
     /**
      * Advance the camera by one frame.
      *
+     * dt policy (fail closed -- see decisions/0002-dt-policy.md):
+     *   - Non-finite (NaN/+-Infinity/null) or negative dt is REJECTED: the call
+     *     is a documented no-op, nothing is mutated, and it returns. A poisoned
+     *     frame is invisible (CP-3/CP-4).
+     *   - dt === 0 and -0 are legal no-advance frames (zero deltas everywhere).
+     *   - A finite dt above this.maxDt (default 0.1) is clamped to this.maxDt so
+     *     a frame-time spike cannot diverge the position lerp; a dt exactly ==
+     *     maxDt passes untouched.
+     *
      * @param {number} dt   Delta time in seconds
      * @param {number} px   Player world X
      * @param {number} py   Player world Y
@@ -665,6 +753,11 @@ export class CinematicCameraPro extends CinematicCamera {
      * @param {number} [pvy=0] Player velocity Y (for lookahead)
      */
     update(dt, px, py, pvx = 0, pvy = 0) {
+        // Fail-closed dt door (CP-3/CP-4, D-k). Two comparisons at the very top;
+        // the whole body below is byte-identical to 1.1.0 (H-C: zero new
+        // branches on the hot path). A rejected frame mutates nothing.
+        if (!Number.isFinite(dt) || dt < 0) return;
+        if (dt > this.maxDt) dt = this.maxDt;
 
         const mt = this._mt;
         const seq = this._seq;
@@ -861,20 +954,82 @@ export class CinematicCameraPro extends CinematicCamera {
 
     /**
      * Restore camera state from a snapshot.
+     *
+     * Fail-closed contract (CP-12/CP-19 -- see decisions/0002-dt-policy.md
+     * siblings): the snapshot is validated in full BEFORE any field is written,
+     * so a rejected snapshot mutates nothing.
+     *   - snapshot must be a non-null object.
+     *   - posX/posY are both-or-neither; targetX/targetY are both-or-neither.
+     *   - every present numeric must be finite (the error names the field).
+     *   - zoom is finite-checked then clamped to minZoom..maxZoom exactly as
+     *     setZoom does -- zoom 0 clamps to minZoom (0.25), not an error.
+     *   - mode, if present, must be an integer FollowMode in range.
+     * The snapshot is pose-only (pos/target/zoom/mode); shake, sequences, and
+     * zoom animations are deliberately not serialized. Any violation throws
+     * ERR_CAMERA_STATE.
+     *
      * @param {Object} snapshot
      * @returns {CinematicCameraPro} this
      */
     setState(snapshot) {
-        if (snapshot.posX !== undefined) {
+        if (typeof snapshot !== 'object' || snapshot === null) {
+            const e = new Error("CinematicCameraPro: setState requires a snapshot object");
+            e.code = "ERR_CAMERA_STATE";
+            throw e;
+        }
+
+        const hasPosX = snapshot.posX !== undefined;
+        const hasPosY = snapshot.posY !== undefined;
+        const hasTargetX = snapshot.targetX !== undefined;
+        const hasTargetY = snapshot.targetY !== undefined;
+        const hasZoom = snapshot.zoom !== undefined;
+        const hasMode = snapshot.mode !== undefined;
+
+        // Pairing rule: a lone posX would write pos[1] = undefined -> NaN (F9).
+        if (hasPosX !== hasPosY) {
+            const e = new Error("CinematicCameraPro: setState posX and posY must be provided together");
+            e.code = "ERR_CAMERA_STATE";
+            throw e;
+        }
+        if (hasTargetX !== hasTargetY) {
+            const e = new Error("CinematicCameraPro: setState targetX and targetY must be provided together");
+            e.code = "ERR_CAMERA_STATE";
+            throw e;
+        }
+
+        // Finiteness of every present numeric (validate ALL before mutating ANY).
+        if (hasPosX && (!Number.isFinite(snapshot.posX) || !Number.isFinite(snapshot.posY))) {
+            const e = new Error("CinematicCameraPro: setState posX/posY must be finite numbers");
+            e.code = "ERR_CAMERA_STATE";
+            throw e;
+        }
+        if (hasTargetX && (!Number.isFinite(snapshot.targetX) || !Number.isFinite(snapshot.targetY))) {
+            const e = new Error("CinematicCameraPro: setState targetX/targetY must be finite numbers");
+            e.code = "ERR_CAMERA_STATE";
+            throw e;
+        }
+        if (hasZoom && !Number.isFinite(snapshot.zoom)) {
+            const e = new Error("CinematicCameraPro: setState zoom must be a finite number");
+            e.code = "ERR_CAMERA_STATE";
+            throw e;
+        }
+        if (hasMode && (!Number.isInteger(snapshot.mode) || snapshot.mode < 0 || snapshot.mode >= FOLLOW_STRATEGIES.length)) {
+            const e = new Error("CinematicCameraPro: setState mode must be an integer FollowMode in [0, " + (FOLLOW_STRATEGIES.length - 1) + "]");
+            e.code = "ERR_CAMERA_STATE";
+            throw e;
+        }
+
+        // All validated -> apply. zoom takes the same clamp as setZoom.
+        if (hasPosX) {
             this.pos[0] = snapshot.posX;
             this.pos[1] = snapshot.posY;
         }
-        if (snapshot.targetX !== undefined) {
+        if (hasTargetX) {
             this.target[0] = snapshot.targetX;
             this.target[1] = snapshot.targetY;
         }
-        if (snapshot.zoom !== undefined) this.zoom = snapshot.zoom;
-        if (snapshot.mode !== undefined) this.mode = snapshot.mode;
+        if (hasZoom) this.zoom = clamp(snapshot.zoom, this.minZoom, this.maxZoom);
+        if (hasMode) this.mode = snapshot.mode;
         this._updateBoundsForZoom();
         return this;
     }

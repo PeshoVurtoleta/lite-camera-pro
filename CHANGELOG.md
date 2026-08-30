@@ -6,6 +6,82 @@ Versioning. Version lives in three places at once -- `package.json`, the
 `VERSION` const in `src/index.js`, and the `Version:` header in `llms.txt` --
 bumped together or not at all.
 
+## [1.2.0] -- 2026-08-30
+
+Fail-closed doors. Three reproduced ways ordinary runtime garbage permanently
+broke the render are closed at the entry, not patched in the body: a NaN dt that
+poisoned shake and camera forever (CP-3), a frame-time spike that diverged the
+position lerp (CP-4), and garbage into seven facade entries that crashed or froze
+at frame N+1 (CP-12, CP-19). The hot bodies are untouched: the only additions to
+an update path are two 2-line entry doors (`update()`, `updateShake()`), so the
+T6 alloc gate still holds at maxMajor 0 / maxPauseMs 4 with the shake and parallax
+pools pinned by identity. No new exports; the T8 main-entry surface is unchanged
+but for the VERSION value. Full policy in `decisions/0002-dt-policy.md` (repo-only).
+
+Credit: the ROADMAP audit catalogued CP-3/CP-4/CP-12; the PRO1 qa pass surfaced
+the CP-19 facade over-reads.
+
+### Added
+
+- **`cam.maxDt` tunable (default 0.1s).** `update()` clamps a finite dt above this
+  ceiling before integrating so a frame-time spike cannot diverge the position
+  lerp; a dt exactly == maxDt passes untouched. A plain field beside `lerpSpeed`,
+  not a per-frame-validated input (H-C).
+- **Fail-closed doors** on `setMode`, `setState`, `setZoom`, `zoomAt`,
+  `trackMultiple`, `setTargetCount` (facade) and `registerPreset` (shake
+  registry). Setters validate at the call so a defect fails loud there instead of
+  as a raw crash on the next frame. Shake profiles now finiteness-check every
+  numeric (decay/freq/maxOffset/maxAngle/dirX/dirY, not just trauma/intensity) in
+  the cold entry; the `profile.dirX || 0` NaN-laundering is removed.
+- **Five error codes** (house style, `.code` on a named Error): `ERR_CAMERA_MODE`,
+  `ERR_CAMERA_STATE`, `ERR_CAMERA_ZOOM`, `ERR_CAMERA_TARGETS`, `ERR_SHAKE_PRESET`.
+  Documented in `llms.txt`; a metadata drift guard asserts every code greppable in
+  `src/` is documented and vice versa (both directions, fail closed).
+- **dt policy decision record.** `decisions/0002-dt-policy.md` adopts reject
+  (Policy A) + clamp (Policy B) and records the rejection of an exponential-damping
+  rewrite (Policy C) by measurement. Repo-only; not shipped in the tarball.
+
+### Changed
+
+- **Measured door cost in the subpath weights** (esm, unminified, gzip -9):
+  `./shake` 2.82 -> 3.01 KB gz (the addShake full-profile guard + the preset
+  registry doors), `./sequence` 5.94 -> 6.01 KB gz (drags the preset registry),
+  `.` 21.70 -> 23.19 KB gz (all doors + their JSDoc). `./parallax`, `./bounds`,
+  `./multi`, `./follow` unchanged. The `./shake` budget gate (16384 B) holds at
+  3082 B.
+
+### Fixed
+
+- **CP-3 -- a NaN dt no longer poisons the shake engine forever.** Before:
+  `updateShake(state, NaN)` drove `time`/`trauma` to NaN, the `trauma <= 0` test
+  never fired, and `computeShake` emitted NaN every later frame; after one poison
+  frame plus 10k good frames the slot was still active with a NaN offset. Now the
+  reject door makes that frame a no-op and the slot decays to `active === false`,
+  `offsetX === 0`. The same poison via a profile (a NaN `decay`) is closed by the
+  addShake full-profile finiteness check.
+- **CP-4 -- a dt spike no longer diverges the position lerp.** Before: 40 frames
+  of `dt = 0.5` with `BoundsType.NONE` blew `pos` past 1e6 (the explicit
+  integrator is unstable for `lerpSpeed * dt > 2`). Now `update()` clamps dt to
+  `maxDt`, bounding `lerpSpeed * dt <= 0.5` at defaults; pos stays in the world
+  envelope. The exponential-damping alternative was rejected: measured against the
+  linear lerp at `lerpSpeed = 5` over 600 frames it drifts 15.884 px at dt = 1/60
+  and 32.981 px at dt = 1/30 -- four to five orders of magnitude above the f32
+  position-storage noise (~1.19e-4 px at a 1000 px offset), a visible change to how
+  valid frames feel (`decisions/0002-dt-policy.md`).
+- **CP-12 -- garbage into the facade fails loud, not at frame N+1.** Before:
+  `setMode(99)` left the strategy lookup undefined and the next `update()` threw a
+  raw un-coded TypeError; `setState({ zoom: 0 })` skipped the setZoom clamp and set
+  `visibleW` to Infinity; `setState({ zoom: NaN })` emitted `scale(NaN)` (a black
+  screen, no error); `shakePreset(undefined)` threw a raw TypeError from
+  `name.toLowerCase()`; `setZoom(NaN)` set zoom to NaN. Now each rejects at its door
+  (`ERR_CAMERA_MODE` / `ERR_CAMERA_STATE` / `ERR_CAMERA_ZOOM`) or is a documented
+  no-op (`shakePreset` unknown name), and `setState({ zoom: 0 })` clamps to 0.25.
+- **CP-19 -- multi-target over-reads are unreachable.** Before: `setTargetCount(64)`
+  on 2 targets, or `trackMultiple` with a garbage entry, crashed `updateMultiTarget`
+  at frame N+1 reading `.x` on undefined. Now `trackMultiple` validates the array and
+  every entry at call time and `setTargetCount` bounds the count to the array length,
+  both throwing `ERR_CAMERA_TARGETS`; the facade over-read is unreachable.
+
 ## [1.1.0] -- 2026-08-26
 
 Subpath exports. A consumer who needs only screen shake now imports
@@ -118,5 +194,6 @@ modes, multi-target auto-framing, an 8-slot simplex-noise shake engine with
 presets, fluent timeline sequences, a 16-layer parallax manager, per-edge
 bounds, a debug HUD, and zero-alloc coordinate conversion.
 
+[1.2.0]: https://github.com/PeshoVurtoleta/lite-camera-pro/releases/tag/v1.2.0
 [1.0.1]: https://github.com/PeshoVurtoleta/lite-camera-pro/releases/tag/v1.0.1
 [1.0.0]: https://github.com/PeshoVurtoleta/lite-camera-pro/releases/tag/v1.0.0

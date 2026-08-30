@@ -77,6 +77,12 @@ export declare const RUMBLE: Readonly<ShakeProfile>;
 export declare const HEAVY_IMPACT: Readonly<ShakeProfile>;
 
 // -- Preset registry (ShakePresets.js) --
+/** Case-insensitive lookup. Unknown or non-string name returns null (1.2.0). */
 export declare function getPreset(name: string): Readonly<ShakeProfile> | null;
+/**
+ * Register (or overwrite) a named preset. Setup path: fails loud.
+ * @throws Error with code "ERR_SHAKE_PRESET" if name is not a non-empty
+ *   string or profile is not a non-null object (1.2.0).
+ */
 export declare function registerPreset(name: string, profile: ShakeProfile): void;
 export declare function listPresets(): string[];

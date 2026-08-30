@@ -75,14 +75,24 @@ export declare class CinematicCameraPro {
     predictTime: number;
     hybridVerticalSnap: boolean;
 
+    /**
+     * update() clamps a finite dt above this ceiling before integrating so a
+     * frame-time spike cannot diverge the position lerp (default 0.1s). Plain
+     * tunable; not validated per frame. See update() for the full dt policy.
+     */
+    maxDt: number;
+
     debugConfig: DebugHUDConfig;
 
     // Follow mode
+    /** @throws Error `code = "ERR_CAMERA_MODE"` if mode is not an integer FollowMode in range. */
     setMode(mode: number): this;
 
     // Multi-target
+    /** @throws Error `code = "ERR_CAMERA_TARGETS"` if targets is not an array or any entry lacks finite x/y (validated at call time). */
     trackMultiple(targets: Vec2[], options?: MultiTargetOptions): this;
     trackSingle(): this;
+    /** @throws Error `code = "ERR_CAMERA_TARGETS"` if count is not an integer in [0, targets.length]. */
     setTargetCount(count: number): this;
 
     // Shake
@@ -98,7 +108,9 @@ export declare class CinematicCameraPro {
     readonly sequencePlaying: boolean;
 
     // Zoom
+    /** @throws Error `code = "ERR_CAMERA_ZOOM"` if level is non-finite or duration is non-finite/negative. */
     setZoom(level: number, duration?: number, ease?: (t: number) => number): this;
+    /** @throws Error `code = "ERR_CAMERA_ZOOM"` if anchor x/y, level, or duration is non-finite (or duration negative). A non-function ease normalizes to null. */
     zoomAt(targetOrX: number | Vec2, yOrLevel: number, levelOrDur?: number, duration?: number, ease?: (t: number) => number): this;
 
     // Coordinate conversion
@@ -117,6 +129,12 @@ export declare class CinematicCameraPro {
     clearBoundsRect(): this;
 
     // Core
+    /**
+     * Advance the camera one frame. dt policy (fail closed): a non-finite or
+     * negative dt is a no-op (nothing mutated); dt 0/-0 is a legal no-advance
+     * frame; a finite dt above maxDt is clamped to maxDt (a dt exactly == maxDt
+     * passes untouched).
+     */
     update(dt: number, px: number, py: number, pvx?: number, pvy?: number): void;
     apply(ctx: CanvasRenderingContext2D): void;
 
@@ -126,6 +144,15 @@ export declare class CinematicCameraPro {
 
     // Save / load
     getState(): { posX: number; posY: number; targetX: number; targetY: number; zoom: number; mode: number };
+    /**
+     * Restore a pose-only snapshot (pos/target/zoom/mode). Validated in full
+     * before any field is written -- a rejected snapshot mutates nothing.
+     * posX/posY and targetX/targetY are both-or-neither; every present numeric
+     * must be finite; zoom is clamped to minZoom..maxZoom (zoom 0 -> minZoom);
+     * mode must be an integer FollowMode in range. Shake, sequences, and zoom
+     * animations are deliberately not serialized.
+     * @throws Error `code = "ERR_CAMERA_STATE"` on any violation.
+     */
     setState(snapshot: { posX?: number; posY?: number; targetX?: number; targetY?: number; zoom?: number; mode?: number }): this;
 
     // Lifecycle

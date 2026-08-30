@@ -144,10 +144,15 @@ const _registry = {
 /**
  * Get a preset by name.
  *
+ * Fail-closed (CP-12): a non-string name returns null (the event path -- e.g.
+ * cam.shakePreset(undefined) -- must not crash on name.toLowerCase()). An
+ * unknown string returns null too. Case-insensitive for valid strings.
+ *
  * @param {string} name  Preset name (case-insensitive)
  * @returns {Object|null} Shake profile or null
  */
 export function getPreset(name) {
+    if (typeof name !== 'string') return null;
     return _registry[name.toLowerCase()] || null;
 }
 
@@ -165,6 +170,16 @@ export function getPreset(name) {
  * });
  */
 export function registerPreset(name, profile) {
+    // Fail-closed (CP-12, setup path fails loud): a non-string/empty name or a
+    // non-object profile is a defective registration -- reject it rather than
+    // poison the registry with a key that getPreset can never resolve or a
+    // profile addShake would spread into garbage.
+    if (typeof name !== 'string' || name === '' ||
+        typeof profile !== 'object' || profile === null) {
+        const e = new Error("lite-camera-pro: registerPreset(name, profile) requires a non-empty string name and a profile object");
+        e.code = "ERR_SHAKE_PRESET";
+        throw e;
+    }
     _registry[name.toLowerCase()] = Object.freeze({ ...profile });
 }
 

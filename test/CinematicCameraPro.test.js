@@ -217,7 +217,9 @@ describe('CinematicCameraPro', () => {
 
         it('completes zoom at end of duration', () => {
             cam.setZoom(2.0, 0.5);
-            cam.update(0.6, 400, 300);
+            // dt is clamped to maxDt (0.1) by the 1.2.0 dt policy, so a 0.5s zoom
+            // completes over several frames rather than one 0.6s spike.
+            for (let i = 0; i < 6; i++) cam.update(0.1, 400, 300); // 0.6s total >= 0.5s dur
             assert.equal(cam.zoom, 2.0);
             assert.equal(cam._zoomDur, 0);
         });

@@ -8,7 +8,7 @@
 // =============================================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as api from '../src/index.js';
@@ -109,4 +109,32 @@ test('every subpath runtime + types target exists on disk; types is declared fir
 
 test('"./package.json" subpath is present and self-referential', () => {
     assert.equal(pkg.exports['./package.json'], './package.json');
+});
+
+// -- D-j: ERR-code drift guard (v1.2.0) ---------------------------------------
+// Every error code assigned in src/ (e.code = "ERR_...") must be documented in
+// llms.txt, and every ERR_ token documented in llms.txt must be assigned in
+// src/. Both directions fail closed: a new code with no doc, or a doc for a code
+// that was renamed/removed, breaks this test.
+test('D-j: ERR_ codes in src/ and llms.txt agree in both directions', () => {
+    const srcDir = join(root, 'src');
+    const codeAssign = /\.code\s*=\s*["'](ERR_[A-Z_]+)["']/g;
+    const srcCodes = new Set();
+    for (const f of readdirSync(srcDir)) {
+        if (!f.endsWith('.js')) continue;
+        const text = readFileSync(join(srcDir, f), 'utf8');
+        let m;
+        while ((m = codeAssign.exec(text)) !== null) srcCodes.add(m[1]);
+    }
+    assert.ok(srcCodes.size > 0, 'expected at least one ERR_ code assigned in src/');
+
+    const llms = readFileSync(join(root, 'llms.txt'), 'utf8');
+    const llmsCodes = new Set(llms.match(/ERR_[A-Z_]+/g) || []);
+
+    for (const code of srcCodes) {
+        assert.ok(llmsCodes.has(code), 'src assigns ' + code + ' but llms.txt does not document it');
+    }
+    for (const code of llmsCodes) {
+        assert.ok(srcCodes.has(code), 'llms.txt documents ' + code + ' but src/ never assigns it');
+    }
 });
