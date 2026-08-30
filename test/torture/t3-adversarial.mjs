@@ -15,7 +15,7 @@ import { CinematicCameraPro } from '../../src/index.js';
 import {
     createShakeState, addShake, updateShake, computeShake, clearShakes,
 } from '../../src/index.js';
-import { makePrng, SEED, check } from './harness.mjs';
+import { makePrng, SEED, check, rafCount, pumpRaf } from './harness.mjs';
 
 const STORM_FRAMES = 10000;
 const BoundsType_NONE = 3;
@@ -85,5 +85,51 @@ export async function run() {
         }
         check(s.offsetX === 0 && s.offsetY === 0 && s.angle === 0,
             () => 'T3.steal: clearShakes must zero the output');
+    }
+
+    // --- (c) sequence-spam storm: play/stop x 1000 on one camera ------------
+    // Hammer the sequence lifecycle (CP-5 path) on a single live camera: build,
+    // play, advance a few frames (pump the timeline + drive the camera), stop,
+    // repeat. Each stop() must destroy the timeline and release the ticker; the
+    // camera's pose must stay finite through every play and every stop. After
+    // the storm, pumping must produce SILENCE (no live ticker re-requesting) and
+    // the camera must remain finite.
+    {
+        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 7);
+        const SPAM = 1000;
+        for (let i = 0; i < SPAM; i++) {
+            const seq = cam.createSequence({ blendOutTime: (i & 1) ? 0 : 0.3 })
+                .moveTo(300 + (i & 127), 200 + (i & 63), 600)
+                .zoomTo(1.25, 400)
+                .shake('impact', 0.5);
+            cam.playSequence(seq);
+            // Advance a few frames: pump drives the timeline, update() reads it.
+            for (let f = 0; f < 3; f++) {
+                pumpRaf();
+                cam.update(1 / 60, 500 + i, 400 + (i & 31), 1, 0);
+                check(Number.isFinite(cam.pos[0]) && Number.isFinite(cam.pos[1]) &&
+                    Number.isFinite(cam.zoom) && cam.zoom > 0,
+                    () => `T3.seqspam: camera went non-finite mid-play at i=${i} f=${f} ` +
+                        `(${cam.pos[0]},${cam.pos[1]},z=${cam.zoom})`);
+            }
+            cam.stopSequence(); // hard handoff + ticker release
+            cam.update(1 / 60, 500 + i, 400 + (i & 31), 1, 0);
+            check(Number.isFinite(cam.pos[0]) && Number.isFinite(cam.pos[1]),
+                () => `T3.seqspam: camera went non-finite after stop at i=${i} (${cam.pos[0]},${cam.pos[1]})`);
+        }
+
+        // Settle silence: every sequence stopped, so no ticker should re-request.
+        const c0 = rafCount();
+        pumpRaf(); pumpRaf(); pumpRaf(); pumpRaf();
+        check(rafCount() === c0,
+            () => `T3.seqspam: rafCount grew by ${rafCount() - c0} across 4 settle pumps -- a ticker leaked past stop`);
+
+        // A few more follow frames: the camera stays finite in steady state.
+        for (let f = 0; f < 120; f++) {
+            cam.update(1 / 60, 900, 700, 1, 0);
+            check(Number.isFinite(cam.pos[0]) && Number.isFinite(cam.pos[1]),
+                () => `T3.seqspam: camera went non-finite in settle at f=${f}`);
+        }
+        cam.destroy();
     }
 }

@@ -117,6 +117,14 @@ export class CinematicCameraPro extends CinematicCamera {
         // ── Active sequence (null when no sequence is playing) ──
         this._seq = null;
 
+        // ── Blend-back-to-follow remaining time, SECONDS (0 = inactive) ──
+        // Armed when a sequence COMPLETES (from seq._state.blend, the seconds
+        // blendOutTime); update() step 6 glides pos to the follow target over
+        // this window, then lands exactly. stop()/destroy() and a new/stopped
+        // cinematic zero it -- only a natural completion blends. See
+        // decisions/0003-blend-out.md.
+        this._blendRemain = 0;
+
         // ── Parallax layer manager ──
         this._parallax = createParallaxState();
 
@@ -343,8 +351,12 @@ export class CinematicCameraPro extends CinematicCamera {
      * @param {Object} [options]
      * @param {boolean} [options.loop=false]
      * @param {Function} [options.onComplete]
-     * @param {number} [options.blendOutTime=0.3]
+     * @param {number} [options.blendOutTime=0.3]  SECONDS to blend position back
+     *   to follow on completion (0 = hard handoff). Step durations are in
+     *   MILLISECONDS -- different units. Zoom is not blended.
      * @returns {CameraSequence} A fluent sequence builder
+     * @throws {Error} code "ERR_SEQUENCE_OPTIONS" if blendOutTime is non-finite
+     *   or negative.
      *
      * @example
      * const seq = camera.createSequence()
@@ -385,13 +397,18 @@ export class CinematicCameraPro extends CinematicCamera {
         }
 
         this._seq = seq;
+        // A new cinematic cancels any pending blend-out from a prior completion.
+        this._blendRemain = 0;
         seq.play();
         return this;
     }
 
     /**
-     * Stop the current sequence and return to follow mode.
-     * The transition back is smooth (lerp continues from current pos).
+     * Stop the current sequence and return to follow mode. This is a HARD
+     * handoff -- it destroys the sequence timeline (releasing the shared ticker,
+     * CP-5) and cancels any pending blend-out; the follow lerp continues from
+     * the current pos with no glide. A blend only happens when a sequence
+     * COMPLETES naturally (see createSequence blendOutTime).
      *
      * @returns {CinematicCameraPro} this
      */
@@ -400,6 +417,8 @@ export class CinematicCameraPro extends CinematicCamera {
             this._seq.stop();
             this._seq = null;
         }
+        // An explicit stop is a hard handoff -- cancel any pending blend-out.
+        this._blendRemain = 0;
         return this;
     }
 
@@ -784,14 +803,20 @@ export class CinematicCameraPro extends CinematicCamera {
             // ── MULTI-TARGET PATH ──
             updateMultiTarget(this, dt, mt.targets, mt.count);
 
-            // Clean up finished sequence ref
-            if (seq && !seq.playing) this._seq = null;
+            // Clean up finished sequence ref; adopt its blend-out budget (D-b)
+            // so step 6 glides back to follow. seq._state.blend is armed by a
+            // natural completion and zeroed by stop()/destroy() -- a hard
+            // handoff writes 0, no glide.
+            if (seq && !seq.playing) { this._blendRemain = seq._state.blend; this._seq = null; }
 
         } else {
             // ── SINGLE-TARGET PATH ──
 
-            // Clean up finished sequence ref
-            if (seq && !seq.playing) this._seq = null;
+            // Clean up finished sequence ref; adopt its blend-out budget (D-b)
+            // so step 6 glides back to follow. seq._state.blend is armed by a
+            // natural completion and zeroed by stop()/destroy() -- a hard
+            // handoff writes 0, no glide.
+            if (seq && !seq.playing) { this._blendRemain = seq._state.blend; this._seq = null; }
 
             // ── 1. Advance zoom animation ──
             const prevZoom = this.zoom;
@@ -851,6 +876,25 @@ export class CinematicCameraPro extends CinematicCamera {
         if ((seq && seq._state.active) || (mt.active && mt.targets && mt.count > 0)) {
             this.pos[0] = this.target[0];
             this.pos[1] = this.target[1];
+        } else if (this._blendRemain > 0) {
+            // Blend-back-to-follow after a sequence completed (D-a). Linear
+            // deadline convergence to a MOVING target that lands exactly at the
+            // window end; with a static target the per-frame step is constant
+            // (a smooth glide). Only pos is blended -- zoom is not (no
+            // follow-side zoom target exists; the sequence's final zoom
+            // persists). dt=0 -> k=0, no decrement -> the blend freezes with
+            // the camera (PRO2 dt policy). See decisions/0003-blend-out.md.
+            const r = this._blendRemain - dt;
+            if (r <= 0) {
+                this._blendRemain = 0;
+                this.pos[0] = this.target[0];
+                this.pos[1] = this.target[1];
+            } else {
+                const k = dt / this._blendRemain; // k < 1 (dt < old remaining)
+                this._blendRemain = r;
+                this.pos[0] += (this.target[0] - this.pos[0]) * k;
+                this.pos[1] += (this.target[1] - this.pos[1]) * k;
+            }
         } else {
             this.pos[0] += (this.target[0] - this.pos[0]) * this.lerpSpeed * dt;
             this.pos[1] += (this.target[1] - this.pos[1]) * this.lerpSpeed * dt;

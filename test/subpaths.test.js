@@ -82,7 +82,7 @@ test("'.' entry export-name set is unchanged from the frozen 1.0.1 surface (+ VE
         'updateMultiTarget', 'updateParallax', 'updateShake',
     ];
     assert.deepEqual(Object.keys(mainEntry).sort(), [...FROZEN_1_0_1].sort());
-    assert.equal(MAIN_VERSION, '1.2.0');
+    assert.equal(MAIN_VERSION, '1.3.0');
 });
 
 // -----------------------------------------------------------------------------

@@ -87,10 +87,49 @@ export function makeRecorderSink() {
 }
 
 // -- counting requestAnimationFrame polyfill --------------------------------
+// Store-only COUNTING as before (never auto-fires -- lite-ticker's _tick
+// re-requests every frame, so an auto-firing polyfill is an infinite hot loop).
+// PLUS a single latest-callback slot (D-e): the last cb+id handed to
+// requestAnimationFrame is retained so a tier can PUMP one frame on demand.
+// cancelAnimationFrame clears the slot on id match, so a paused/destroyed
+// ticker leaves nothing to pump. This is what makes the T7 ticker-conservation
+// gate bite: pumping a LIVE ticker's stored callback drives _tick, which
+// re-requests (rafCount grows); a RELEASED ticker cleared its slot on destroy,
+// so the pump is a no-op and the count holds.
 let _rafId = 0;
 export let rafRequests = 0;
 export function rafCount() { return rafRequests; }
+
+let _rafSlotCb = null;
+let _rafSlotId = 0;
+let _pumpClock = 0;
+
 if (typeof globalThis.requestAnimationFrame === 'undefined') {
-    globalThis.requestAnimationFrame = (_cb) => { rafRequests++; return ++_rafId; };
-    globalThis.cancelAnimationFrame = (_handle) => {};
+    globalThis.requestAnimationFrame = (cb) => {
+        rafRequests++;
+        const id = ++_rafId;
+        _rafSlotCb = cb;
+        _rafSlotId = id;
+        return id;
+    };
+    globalThis.cancelAnimationFrame = (handle) => {
+        if (handle === _rafSlotId) { _rafSlotCb = null; _rafSlotId = 0; }
+    };
+}
+
+/**
+ * Invoke the latest stored RAF callback once with a synthetic monotonic
+ * timestamp (+16 ms per pump). Takes-and-CLEARS the slot first, so a live
+ * ticker's re-request lands in a fresh slot (and bumps rafCount); a released
+ * ticker (slot already cleared by cancelAnimationFrame at destroy) is a no-op.
+ * @returns {boolean} true if a callback fired.
+ */
+export function pumpRaf() {
+    const cb = _rafSlotCb;
+    if (cb === null) return false;
+    _rafSlotCb = null;
+    _rafSlotId = 0;
+    _pumpClock += 16;
+    cb(_pumpClock);
+    return true;
 }

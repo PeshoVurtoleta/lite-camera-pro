@@ -5,13 +5,25 @@
 // =============================================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import {
-    CinematicCameraPro,
+    CinematicCameraPro, FollowMode,
     createShakeState, addShake, addTraumaSimple, updateShake, computeShake,
     createMultiTargetState,
 } from '../src/index.js';
 import { PUBLIC_METHODS, callByName } from './torture/public-surface.mjs';
-import './helpers.mjs'; // RAF polyfill (destroy() path is used below)
+import { pumpRaf, rafCount } from './helpers.mjs'; // RAF polyfill + pump (CP-5)
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Pump the store-only RAF until the sequence's timeline completes (or a guard
+// trips). Each pump advances lite-ticker by 16 ms; completion flips seq.playing.
+function pumpToCompletion(seq, guard = 20000) {
+    while (seq.playing && guard-- > 0) pumpRaf();
+    return seq.playing === false;
+}
 
 const noopSink = { translate() {}, rotate() {}, scale() {} };
 
@@ -274,4 +286,322 @@ test('CP-19: trackMultiple(null) and a garbage entry throw ERR_CAMERA_TARGETS', 
     const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
     assert.throws(() => cam.trackMultiple(null), (e) => e.code === 'ERR_CAMERA_TARGETS');
     assert.throws(() => cam.trackMultiple([{ x: NaN, y: 0 }]), (e) => e.code === 'ERR_CAMERA_TARGETS');
+});
+
+// =============================================================================
+// PRO3 (v1.3.0) -- sequence integrity: CP-5, CP-11, CP-10b, and the D-g rows.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// CP-11 -- resolveAt honors `at: 0` (and the whole position vocabulary). Before:
+//   the five builders used `opts && opts.at || undefined`, so `at: 0` (falsy)
+//   was dropped and the step appended sequentially. Duration pins prove the
+//   timeline is built at-aware. Revert to the `|| undefined` form and the at:0
+//   case reads 1500 instead of 1000 -> fails.
+// -----------------------------------------------------------------------------
+test('CP-11: at:0 / at:1 / at:"<" / at:"+=100" / at:undefined duration pins', () => {
+    const mk = (at) => {
+        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const seq = cam.createSequence().moveTo(100, 100, 1000)
+            .wait(500, at === undefined ? undefined : { at });
+        seq.play();               // build the timeline (at-aware duration)
+        const d = seq.duration;
+        seq.destroy();            // release the ticker ref
+        return d;
+    };
+    assert.equal(mk(0), 1000, 'at:0 -> wait overlaps from t=0, total = max(1000, 500) = 1000');
+    assert.equal(mk(1), 1000, 'at:1 -> wait 1..501, total 1000');
+    assert.equal(mk('<'), 1000, 'at:"<" -> wait at prev start (0), total 1000');
+    assert.equal(mk('+=100'), 1600, 'at:"+=100" -> wait 1100..1600, total 1600');
+    assert.equal(mk(undefined), 1500, 'appended -> wait 1000..1500, total 1500');
+});
+
+test('CP-11: shake(name, { at: 0 }) is honored (fires at t=0, not appended)', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const seq = cam.createSequence()
+        .moveTo(500, 500, 1000)
+        .shake('impact', { at: 0 });   // 2-arg form: intensity slot carries { at }
+    seq.seek(1);                        // cross only t=0..1ms
+    // If at:0 honored, the duration-0 shake at t=0 fired -> addShake made it active.
+    // If it were appended (t=1000), seeking to 1ms would NOT cross it.
+    assert.equal(cam._shake.active, true, 'shake at:0 must fire when seeking past t=0');
+    seq.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// CP-5 -- stop() releases the shared ticker. Before: stop() called
+//   timeline.reset(), which detached the update callback but never released the
+//   refcount, so the RAF loop stayed live forever. Now stop() destroys the
+//   timeline. Pumping the stored RAF callback drives lite-ticker's _tick, which
+//   re-requests a frame ONLY while the ticker is running -- so after stop() the
+//   pump must produce zero new requests. Revert stop() to reset() and the pump
+//   grows the count -> fails.
+// -----------------------------------------------------------------------------
+test('CP-5: stop() releases the ticker -- pumpRaf delta is 0 after stop', async () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const seq = cam.createSequence().moveTo(400, 300, 1000).zoomTo(1.5, 800);
+    cam.playSequence(seq);
+    pumpRaf(); pumpRaf();            // advance a few frames while live
+    seq.stop();                      // must destroy the timeline + release ticker
+    await new Promise((r) => setTimeout(r, 10));
+    const c0 = rafCount();
+    pumpRaf(); pumpRaf(); pumpRaf(); pumpRaf();
+    assert.equal(rafCount(), c0, 'a released ticker must not re-request on pump');
+    cam.destroy();
+});
+
+test('CP-5/F2: a stopped seq does not pin the loop after a later clean seq destroys', async () => {
+    const camA = new CinematicCameraPro(800, 600, 3200, 2400, 2);
+    const seqA = camA.createSequence().moveTo(200, 200, 800);
+    camA.playSequence(seqA);
+    pumpRaf();
+    seqA.stop();                     // pre-fix: stopped-not-destroyed pins the loop
+
+    const camB = new CinematicCameraPro(800, 600, 3200, 2400, 3);
+    const seqB = camB.createSequence().moveTo(300, 300, 800);
+    camB.playSequence(seqB);
+    pumpRaf();
+    seqB.destroy();                  // a later CLEAN sequence destroys
+
+    await new Promise((r) => setTimeout(r, 10));
+    const c0 = rafCount();
+    pumpRaf(); pumpRaf(); pumpRaf(); pumpRaf();
+    assert.equal(rafCount(), c0, 'no ticker may survive once every seq is stopped/destroyed (F2)');
+    camA.destroy();
+    camB.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// D-d -- resume() is a no-op unless the sequence is paused. Before: resume() was
+//   `if (timeline) timeline.play()`, so resuming after stop or completion
+//   REPLAYED the whole cinematic -- re-firing shakes and callbacks on the live
+//   camera. Now it is `if (timeline && isPlaying)`; pause() keeps isPlaying,
+//   stop()/completion clear it.
+// -----------------------------------------------------------------------------
+test('D-d: resume() after stop() is a no-op (does not replay)', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const seq = cam.createSequence().shake('impact', { at: 0 }).moveTo(400, 400, 600);
+    cam.playSequence(seq);
+    seq.stop();                       // timeline destroyed
+    cam.clearShakes();
+    const c0 = rafCount();
+    seq.resume();                     // must do nothing
+    assert.equal(cam._shake.active, false, 'resume-after-stop must not refire the shake');
+    assert.equal(rafCount(), c0, 'resume-after-stop must not request a frame');
+    assert.equal(seq.playing, false);
+    cam.destroy();
+});
+
+test('D-d/A7: resume() after completion refires no shake and adds 0 RAF requests', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    // shake at t=0 so a zombie replay (auto-seek(0)) would refire it immediately.
+    const seq = cam.createSequence({ blendOutTime: 0 })
+        .shake('impact', { at: 0 })
+        .moveTo(500, 500, 300);
+    cam.playSequence(seq);
+    assert.ok(pumpToCompletion(seq), 'sequence must complete under the pump');
+    cam.clearShakes();                // clear the legitimate shake-step impulse
+    for (let i = 0; i < cam._shake.slotCount; i++) {
+        assert.equal(cam._shake.slots[i].active, false);
+    }
+    const c0 = rafCount();
+    seq.resume();                     // completed -> must be a no-op
+    assert.equal(cam._shake.active, false, 'every shake slot must stay inactive');
+    for (let i = 0; i < cam._shake.slotCount; i++) {
+        assert.equal(cam._shake.slots[i].active, false, 'resume must not refire a shake slot');
+    }
+    assert.equal(rafCount(), c0, 'resume-after-completion adds 0 RAF requests');
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// A7 / D-g -- replay + progress + duration after stop.
+// -----------------------------------------------------------------------------
+test('A7/H-E: play -> stop -> play replays; progress after stop is 0', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const seq = cam.createSequence().moveTo(300, 300, 500).zoomTo(1.4, 400);
+    cam.playSequence(seq);
+    pumpRaf();
+    assert.equal(seq.playing, true);
+    seq.stop();
+    assert.equal(seq.progress, 0, 'progress after stop must be 0');
+    assert.equal(seq.playing, false);
+    seq.play();                       // rebuilds from a fresh snapshot
+    assert.equal(seq.playing, true, 'play() after stop must replay');
+    seq.destroy();
+});
+
+test('A7/CP-11: duration after stop falls to the step-sum (1500 for the +=100 build)', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const seq = cam.createSequence().moveTo(100, 100, 1000).wait(500, { at: '+=100' });
+    seq.play();
+    assert.equal(seq.duration, 1600, 'live timeline duration is at-aware (1600)');
+    seq.stop();
+    assert.equal(seq.duration, 1500, 'after stop (timeline destroyed) duration is the naive step-sum');
+    seq.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// D-g -- seek() after stop() rebuilds from a FRESH snapshot and fires the
+//   duration-0 tracks it crosses.
+// -----------------------------------------------------------------------------
+test('D-g: seek() after stop() rebuilds and fires a crossed 0-duration callback', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    let called = 0;
+    const seq = cam.createSequence()
+        .moveTo(200, 200, 1000)
+        .call(() => { called++; }, { at: 0 });
+    cam.playSequence(seq);
+    seq.stop();                       // timeline destroyed
+    assert.equal(called, 0, 'nothing fired yet from a plain play/stop at t=0..0');
+    seq.seek(10);                     // rebuilds (timeline was null) then seeks past t=0
+    assert.equal(called, 1, 'seek-after-stop must rebuild and fire the at:0 callback');
+    seq.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// CP-10b / A5 -- the completion blend is real.
+//   (1) blendOutTime:0 is behavior-identical to a plain follow from the final
+//       pose (control-camera equivalence, OWNER NOTE 1).
+//   (2) default 0.3 reaches a static follow target in 18 +/- 1 frames at
+//       dt=1/60 with a monotone-non-increasing gap and a per-frame step that
+//       never exceeds the first step.
+//   (3) stop() never blends.
+// -----------------------------------------------------------------------------
+test('CP-10b/A5: blendOutTime:0 completion == plain follow from the final pose', () => {
+    const DT = 1 / 60;
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    cam.setMode(FollowMode.PREDICTIVE);
+    const seq = cam.createSequence({ blendOutTime: 0 })
+        .moveTo(700, 500, 300)
+        .zoomTo(1.3, 200);
+    cam.playSequence(seq);
+    assert.ok(pumpToCompletion(seq), 'must complete');
+    // First post-completion frame: cleanup arms _blendRemain from state.blend
+    // (which is 0 here), nulls _seq, then runs plain follow.
+    cam.update(DT, 900, 700, 30, 20);
+    assert.equal(cam._blendRemain, 0, 'blendOutTime:0 must NOT arm a blend');
+
+    // Control matched to the camera's exact pose, then stepped identically.
+    const control = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    control.setMode(FollowMode.PREDICTIVE);
+    control.setState({
+        posX: cam.pos[0], posY: cam.pos[1],
+        targetX: cam.target[0], targetY: cam.target[1],
+        zoom: cam.zoom, mode: cam.mode,
+    });
+    control.look[0] = cam.look[0];
+    control.look[1] = cam.look[1];
+    for (let f = 0; f < 200; f++) {
+        const px = 900 + f * 2, py = 700 + ((f * 5) % 90), pvx = 30, pvy = (f & 32) ? -20 : 20;
+        cam.update(DT, px, py, pvx, pvy);
+        control.update(DT, px, py, pvx, pvy);
+        assert.ok(Object.is(cam.pos[0], control.pos[0]) && Object.is(cam.pos[1], control.pos[1]),
+            `A5 equivalence: pos diverged at frame ${f}`);
+    }
+    cam.destroy();
+    control.destroy();
+});
+
+test('CP-10b/A5: default 0.3 reaches a static target in 18 +/- 1 frames, monotone, bounded step', () => {
+    const DT = 1 / 60;
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    cam.setMode(FollowMode.PREDICTIVE); // zero-velocity -> static, deadzone-free target
+    const seq = cam.createSequence({ blendOutTime: 0.3 }).moveTo(1500, 1200, 200);
+    cam.playSequence(seq);
+    assert.ok(pumpToCompletion(seq), 'must complete');
+
+    // Static player, zero velocity -> PREDICTIVE target is constant.
+    const PX = 400, PY = 300;
+    let frames = 0;
+    let firstStep = -1;
+    let prevGap = Infinity;
+    let landed = -1;
+    for (let f = 0; f < 60; f++) {
+        const px = cam.pos[0], py = cam.pos[1];
+        cam.update(DT, PX, PY, 0, 0);
+        const step = Math.hypot(cam.pos[0] - px, cam.pos[1] - py);
+        const gap = Math.hypot(cam.target[0] - cam.pos[0], cam.target[1] - cam.pos[1]);
+        if (cam._blendRemain > 0 || landed === -1) frames++;
+        if (firstStep < 0 && step > 0) firstStep = step;
+        // monotone non-increasing gap (allow fp slack)
+        assert.ok(gap <= prevGap + 1e-9, `gap must not grow at frame ${f} (${gap} > ${prevGap})`);
+        prevGap = gap;
+        if (firstStep > 0) {
+            assert.ok(step <= firstStep * (1 + 1e-6), `step must not exceed the first step at frame ${f} (${step} > ${firstStep})`);
+        }
+        if (cam._blendRemain === 0 && landed === -1) { landed = f + 1; }
+    }
+    assert.ok(landed >= 17 && landed <= 19, `blend must land in 18 +/- 1 frames (landed at ${landed})`);
+    assert.equal(prevGap, 0, 'at the landing frame pos must equal target exactly');
+    cam.destroy();
+});
+
+test('CP-10b/A5: stop() (direct seq.stop) never blends', () => {
+    const DT = 1 / 60;
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    cam.setMode(FollowMode.PREDICTIVE);
+    const seq = cam.createSequence({ blendOutTime: 0.3 }).moveTo(1500, 1200, 400);
+    cam.playSequence(seq);
+    pumpRaf(); pumpRaf();
+    seq.stop();                       // direct stop -> state.blend zeroed
+    cam.update(DT, 400, 300, 0, 0);   // cleanup would arm _blendRemain from state.blend
+    assert.equal(cam._blendRemain, 0, 'a stopped sequence must never arm a blend');
+    // stopSequence() path too.
+    const seq2 = cam.createSequence({ blendOutTime: 0.3 }).moveTo(1500, 1200, 400);
+    cam.playSequence(seq2);
+    pumpRaf();
+    cam.stopSequence();
+    cam.update(DT, 400, 300, 0, 0);
+    assert.equal(cam._blendRemain, 0, 'stopSequence() must never arm a blend');
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// A6 -- H-C byte-equality: a camera that never touches a sequence produces the
+//   exact 1.2.0 stream. Replays the fixture's captured schedule and compares
+//   every field bit-for-bit (Object.is on the decoded Float64). The fixture was
+//   captured on the pristine 1.2.0 tree BEFORE this diff; it is never regenerated.
+// -----------------------------------------------------------------------------
+test('A6/H-C: 600-frame no-sequence stream is byte-identical to the 1.2.0 fixture', () => {
+    const fx = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'pro3-follow-baseline.json'), 'utf8'));
+    assert.equal(fx.encoding, 'f64le-base64');
+    assert.equal(fx.frames, 600);
+    const buf = Buffer.from(fx.data, 'base64');
+    const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+
+    const FRAMES = 600, FIELDS = 9, DT = 1 / 60;
+    const cam = new CinematicCameraPro(800, 600, 1600, 1200, 1234);
+    let tx = 0, ty = 0, rot = 0, sx = 0;
+    const sink = {
+        translate(x, y) { tx = x; ty = y; },
+        rotate(a) { rot = a; },
+        scale(x, _y) { sx = x; },
+    };
+
+    let off = 0;
+    for (let f = 0; f < FRAMES; f++) {
+        if (f === 100) cam.setZoom(1.6, 0.5);
+        if (f === 200) cam.shake({ trauma: 0.6, freq: 15, decay: 1.2, maxOffset: 12, maxAngle: 0.04 }, 1);
+        if (f === 300) cam.setMode(2);
+        if (f === 400) cam.setMode(0);
+        if (f === 450) cam.zoomAt(500, 400, 2.0, 0.5);
+
+        const px = 100 + f * 1.5;
+        const py = 80 + ((f * 7) % 120);
+        const pvx = 90;
+        const pvy = (f & 64) ? -40 : 40;
+
+        cam.update(DT, px, py, pvx, pvy);
+        cam.apply(sink);
+
+        const row = [cam.pos[0], cam.pos[1], cam.look[0], cam.look[1], cam.zoom, tx, ty, rot, sx];
+        for (let k = 0; k < FIELDS; k++) {
+            const want = view.getFloat64(off, true);
+            assert.ok(Object.is(row[k], want),
+                `A6 mismatch frame ${f} field ${fx.fields[k]}: got ${row[k]} want ${want}`);
+            off += 8;
+        }
+    }
+    cam.destroy();
 });

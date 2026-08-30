@@ -6,7 +6,7 @@
  * Zero external dependencies outside the @zakkster ecosystem.
  */
 
-export const VERSION = "1.2.0";
+export const VERSION = "1.3.0";
 
 // -- Core --
 export { CinematicCameraPro } from './CinematicCameraPro.js';

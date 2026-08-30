@@ -102,6 +102,7 @@ export declare class CinematicCameraPro {
     clearShakes(): this;
 
     // Sequences
+    /** @throws Error `code = "ERR_SEQUENCE_OPTIONS"` if options.blendOutTime is non-finite or negative. */
     createSequence(options?: CameraSequenceOptions): CameraSequence;
     playSequence(seq: CameraSequence): this;
     stopSequence(): this;

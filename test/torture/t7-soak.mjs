@@ -35,7 +35,7 @@ import {
 } from '@zakkster/lite-leak';
 import { effect, dispose } from '@zakkster/lite-signal';
 import { CinematicCameraPro } from '../../src/index.js';
-import { noopSink, check } from './harness.mjs';
+import { noopSink, check, rafCount, pumpRaf } from './harness.mjs';
 
 const CYCLES = 4096; // leak_cycles
 
@@ -81,8 +81,57 @@ export async function run() {
     check(findings.length === 0, () => `T7: ${findings.length} retention finding(s): ` +
         findings.map((f) => f.kind + ':' + f.reason).join(', '));
 
-    // TODO(PRO3, CP-5): once stopSequence() destroys the timeline, add a
-    // play/stop/destroy variant AND assert the shared-ticker refcount returns to
-    // zero. Both fail today (stopSequence leaks the ticker, retaining the camera),
-    // so neither is asserted in PRO0.
+    // -- CP-5 play/stop/destroy churn + shared-ticker conservation gate -------
+    // PRO3 made stop() destroy the timeline (releasing the shared-ticker
+    // refcount). Play a sequence, STOP it, and drop the camera, N times: every
+    // stop must release the ticker it acquired. The RAF polyfill is store-only,
+    // so the timeline never advances on its own -- but pumping the stored
+    // callback drives lite-ticker's _tick, which RE-REQUESTS a frame only while
+    // the ticker is still running. So after every sequence is stopped and the
+    // shared ticker released (destroyed), pumping four times must NOT grow the
+    // request count. Pre-fix (stop() == reset()) the ticker stays live and each
+    // pump re-requests -- the gate would flag it.
+    {
+        const churnLeaks = [];
+        const ctracker = createLeakTracker({
+            name: 'campro-cp5',
+            onLeak: (r) => churnLeaks.push(r.kind + ':' + String(r.tag)),
+            onWarning: () => {},
+        });
+        ctracker.registerKernel(createOwnerCascadeOrphanKernel());
+
+        const N = 512;
+        for (let i = 0; i < N; i++) {
+            const owner = effect(() => {
+                const cam = new CinematicCameraPro(800, 600, 3200, 2400, i & 255);
+                const seq = cam.createSequence({ blendOutTime: 0.3 })
+                    .moveTo(400 + (i & 63), 300, 1000)
+                    .zoomTo(1.5, 800)
+                    .shake('impact');
+                cam.playSequence(seq); // acquires a timeline (ticker ref +1)
+                seq.stop();            // MUST destroy the timeline (ref -1, CP-5)
+                ctracker.track(cam, releaseNoop, 'cp5-camera', { audit: true });
+                cam.destroy();
+            });
+            dispose(owner);
+        }
+
+        globalThis.gc?.();
+        await new Promise((r) => setTimeout(r, 50));
+        globalThis.gc?.();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const clive = ctracker.size();
+        const cfindings = ctracker.audit();
+        check(clive === 0, () => `T7 CP-5: tracker retained ${clive} camera(s) after ${N} play/stop/destroy cycles` +
+            (churnLeaks.length ? ' (onLeak: ' + churnLeaks.slice(0, 3).join(', ') + ')' : ''));
+        check(cfindings.length === 0, () => `T7 CP-5: ${cfindings.length} retention finding(s): ` +
+            cfindings.map((f) => f.kind + ':' + f.reason).join(', '));
+
+        // Ticker conservation: no live ticker may be left re-requesting frames.
+        const c0 = rafCount();
+        pumpRaf(); pumpRaf(); pumpRaf(); pumpRaf();
+        check(rafCount() === c0, () => `T7 CP-5 conservation: rafCount grew by ${rafCount() - c0} across 4 pumps ` +
+            `after stop()+destroy() -- a shared ticker was not released (CP-5 leak)`);
+    }
 }

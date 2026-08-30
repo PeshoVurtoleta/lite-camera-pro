@@ -6,7 +6,7 @@
 > with presets, fluent timeline sequences, a 16-layer parallax manager, per-edge
 > bounds, a debug HUD, and zero-alloc coordinate conversion.
 
-Version: 1.2.0
+Version: 1.3.0
 
 ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
 CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
@@ -63,8 +63,8 @@ Preset names: 'explosion','earthquake','recoil','impact','landing','damage','rum
 Registry (named exports): registerPreset(name, profile), listPresets(), getPreset(name).
 Preset constants exported: EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT.
 
-## Sequences (fluent timeline; takes over position + zoom, blends back to follow on completion)
-const seq = cam.createSequence({ onComplete })
+## Sequences (fluent timeline; takes over position + zoom)
+const seq = cam.createSequence({ onComplete, blendOutTime })
   .moveTo(x, y, durationMs)
   .zoomTo(level, durationMs)
   .moveAndZoom(x, y, level, durationMs, { ease })
@@ -72,10 +72,31 @@ const seq = cam.createSequence({ onComplete })
   .wait(ms)
   .call(fn);
 cam.playSequence(seq);
-cam.stopSequence();                 // cancel + smooth return to follow
+cam.stopSequence();                 // HARD handoff: destroys the timeline (releases the shared ticker), no blend
 seq.pause(); seq.resume(); seq.seek(ms);
+UNITS: step durations (moveTo/zoomTo/wait/...) are MILLISECONDS (timeline units);
+blendOutTime is SECONDS (class-API units, default 0.3). Different units -- do not mix.
+Step position `{ at }` accepts lite-timeline syntax and honors `at: 0` (absolute t=0);
+`at: undefined` appends; `at: null` appends (ignored by lite-timeline).
+Completion blends camera POSITION back to follow over blendOutTime seconds (0 = hard
+handoff, the pre-1.3.0 behavior); ZOOM is not blended (the sequence's final zoom persists).
+A blend is only visible in position-lerping modes (SMOOTH, PREDICTIVE); LOCK/CUT/HYBRID
+(locked vertical) write pos directly. Looping sequences never complete, so never blend.
+Lifecycle triangle: pause() = resumable, ticker held, pose frozen; stop()/stopSequence() =
+replayable (play() rebuilds from a fresh snapshot), ticker RELEASED, no blend; destroy() = dead.
+Natural COMPLETION does not release the ticker: a completed sequence holds its timeline (and
+the shared-ticker refcount) until stop()/destroy()/play() -- release long-lived completed
+sequences explicitly (CP-24).
+resume() is a no-op unless paused (a stopped/completed sequence is NOT replayed -- that would
+re-fire its shakes and .call callbacks; use play() to replay). After stop() the timeline is
+destroyed: progress reads 0 and duration falls back to the naive step-sum (an `at:'+=100'`
+build reads 1600 while live, 1500 after stop). seek() rebuilds from a fresh snapshot when the
+timeline was destroyed, and (like all timeline callbacks) runs user code -- shake/.call steps,
+onComplete -- SYNCHRONOUSLY for every track it crosses. Re-entrant destroy/stop from a sequence
+callback is unguarded in 1.3.0 (routed to PRO4); defer teardown to the next frame.
 Sequence preset helpers (named exports, return a sequence): panTo(cam, x, y, ms),
 dramaticZoom(cam, x, y, level, ms), bossReveal(cam, x, y, ms), timedShake(cam, presetName, ms).
+bossReveal captures its return pose at BUILD time -- build it immediately before playing.
 Read cam.sequencePlaying (boolean).
 
 ## Parallax (up to 16 layers)
@@ -117,8 +138,8 @@ identities as the main entry (one engine, no fork). Per-subpath gz weight:
   ./bounds    1.13 KB  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, BoundsType
   ./multi     0.89 KB  createMultiTargetState, updateMultiTarget
   ./follow    0.71 KB  FollowMode, FOLLOW_STRATEGIES
-  ./sequence  6.01 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake  (drags lite-timeline + lite-ease by design -- the only subpath that does)
-  .           23.19 KB full class + functional layer
+  ./sequence  7.03 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake  (drags lite-timeline + lite-ease by design -- the only subpath that does)
+  .           24.40 KB full class + functional layer
 Self-reference example (shake only):
   import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
 
@@ -142,6 +163,11 @@ Shake profiles (cam.shake / addShake): every numeric (trauma, decay, freq, maxOf
 maxAngle, dirX, dirY) is resolved to its default then finiteness-checked in the cold entry;
 a non-finite field activates NO slot (a NaN decay would otherwise leave a slot alive forever).
 
+Sequence options (1.3.0): createSequence({ blendOutTime }) validates blendOutTime as a finite
+number >= 0 SECONDS at construction (a cold door, ERR_SEQUENCE_OPTIONS). The hot path gains
+one `> 0` compare on the completion blend field; no other option key is validated (unknown-key
+rejection is deferred to a future major).
+
 Error codes (all throw a house-style Error with a .code):
 - ERR_CAMERA_MODE     setMode(mode): mode must be an integer FollowMode in [0, 4].
 - ERR_CAMERA_STATE    setState(snapshot): non-null object; posX/posY both-or-neither,
@@ -159,6 +185,9 @@ Error codes (all throw a house-style Error with a .code):
                       integer in [0, targets.length].
 - ERR_SHAKE_PRESET    registerPreset(name, profile): non-empty string name + object profile
                       (setup path fails loud).
+- ERR_SEQUENCE_OPTIONS  createCameraSequence / cam.createSequence({ blendOutTime }): blendOutTime
+                      must be a finite number >= 0 SECONDS (0 legal = hard handoff). Validated
+                      once at construction (a cold setup-time door); 1.3.0.
 - ERR_CAMERA_DESTROYED  every public method after destroy() (1.0.1).
 getPreset(name): a non-string or unknown name returns null (never throws) -- the event path.
 cam.shakePreset(name): an unknown or non-string name is a no-op returning this; use

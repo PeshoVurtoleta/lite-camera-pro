@@ -6,6 +6,84 @@ Versioning. Version lives in three places at once -- `package.json`, the
 `VERSION` const in `src/index.js`, and the `Version:` header in `llms.txt` --
 bumped together or not at all.
 
+## [1.3.0] -- 2026-08-31
+
+Sequence integrity. Three reproduced sequence defects are closed and the one
+decorative option is made real. `stop()` leaked the shared-ticker refcount, so a
+stopped sequence pinned the RAF loop forever (CP-5); a step's `at: 0` was dropped
+as falsy and silently appended (CP-11); `blendOutTime` was stored and read by
+nothing, so completion was a hard handoff (CP-10b); and `resume()` after stop or
+completion replayed the whole cinematic, re-firing shakes and callbacks on the
+live camera (D-d). The camera hot path gains exactly one `_blendRemain > 0`
+compare on the non-blending update branch -- measured at ~0.16 ms per 200k
+updates (~0.8 ns/update, inside the run-to-run noise of the ~40 ns/update body);
+the T6 alloc gate is unchanged (0 B/op, maxMajor 0, maxPauseMs 4). Full rationale
+in `decisions/0003-blend-out.md` (repo-only). No new public exports; the T8
+main-entry surface is unchanged but for the VERSION value.
+
+### Added
+
+- **Real completion blend-out.** `blendOutTime` (SECONDS, default 0.3) now drives
+  a linear deadline convergence of camera POSITION back to the follow target when
+  a sequence completes, landing exactly at the window end (0 = hard handoff,
+  identical to 1.2.0). Zoom is not blended (no follow-side zoom target exists;
+  the sequence's final zoom persists). Visible only in position-lerping follow
+  modes (SMOOTH, PREDICTIVE); LOCK/CUT/HYBRID write pos directly. `stop()` and
+  `stopSequence()` never blend; looping sequences never complete, so never blend.
+- **`ERR_SEQUENCE_OPTIONS` door.** `createSequence({ blendOutTime })` /
+  `createCameraSequence` validate `blendOutTime` as a finite number >= 0 seconds
+  at construction (a cold setup-time door, house-style named Error). Documented in
+  `llms.txt`; the bidirectional ERR-code drift guard picks it up.
+- **Ticker-conservation gate + control** in the torture harness: a `pumpRaf()`
+  export drives one stored RAF callback, so T7 asserts a stopped sequence adds
+  zero new RAF requests (delta 0 across 4 pumps), and a T9 leaked-ticker control
+  (`reset()` instead of `destroy()`) proves the gate can fail. T3 gains a
+  play/stop x1000 sequence-spam storm; T6's loop runs a >= 60-frame blend-armed
+  phase under the same budget.
+- **Decision record.** `decisions/0003-blend-out.md` (blend math, the
+  completion-vs-stop discriminator, the resume guard, resolveAt, the measured
+  compare cost, and the before/after table).
+
+- **QA boundary suite + a documented lifecycle gap (CP-24).**
+  `test/qa-boundary-pro3.test.js` (9 tests) pins the multi-target blend
+  deferral, the door boundary table, blend interruption, seek-after-stop
+  re-snapshot, the `at:'>'` grammar token, and zero-step sequences -- and
+  found CP-24: natural COMPLETION does not release the shared ticker; a
+  completed sequence holds its timeline (and the ticker refcount) until
+  `stop()`/`destroy()`/`play()`, and an empty played sequence never
+  self-completes. 1.3.0 ships the documented contract (stop() JSDoc +
+  llms lifecycle block: release long-lived completed sequences
+  explicitly); the structural release is PRO4 lifecycle work because
+  completion fires mid-tick from the ticker itself (the CP-20 re-entrancy
+  class).
+
+### Fixed
+
+- **CP-5: `stop()` releases the shared ticker.** It now destroys the sequence
+  timeline (which releases the refcount) instead of calling `timeline.reset()`,
+  which detached the update callback but pinned the RAF loop. Under a pumped RAF
+  polyfill, requests after `stop()` went from 16 in a 300 ms settle to 0.
+- **CP-11: `at: 0` is honored.** A new module-level `resolveAt` helper replaces
+  the five `opts && opts.at || undefined` builders (and rewires `shake`'s 2-arg
+  form). `.moveTo(100,100,1000).wait(500,{at:0})` now builds 1000 ms (was 1500);
+  `at: 1` -> 1000, `at: '<'` -> 1000, `at: '+=100'` -> 1600, `at: undefined` ->
+  1500 (append), `shake(name, { at: 0 })` fires at t=0.
+- **CP-10b: `blendOutTime` is no longer decorative** (see Added).
+- **D-d: `resume()` no longer replays a stopped or completed sequence.** It is
+  now guarded to the paused state (`timeline && isPlaying`); a
+  resume-after-completion is a no-op instead of re-firing every `.call(fn)` and
+  shake step via the timeline's auto-seek(0).
+
+### Changed
+
+- **Measured subpath weights** (esbuild esm, minify=false, gzip -9): `.` gz
+  23.19 -> 24.40 KB; `./sequence` gz 6.01 -> 7.03 KB (it carries the new blend
+  docs, the door, and resolveAt). `./shake` unchanged at 3.01 KB. Synced into
+  `llms.txt`.
+- **After stop(), `duration` falls back to the naive step-sum** (timeline
+  destroyed): an `at: '+=100'` build reads 1600 ms while live and 1500 ms after
+  stop. `progress` after stop is 0. Documented divergence.
+
 ## [1.2.0] -- 2026-08-30
 
 Fail-closed doors. Three reproduced ways ordinary runtime garbage permanently

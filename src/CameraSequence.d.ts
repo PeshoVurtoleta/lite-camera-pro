@@ -13,6 +13,13 @@ import type { ShakeProfile } from './Shake.js';
 export interface CameraSequenceOptions {
     loop?: boolean;
     onComplete?: () => void;
+    /**
+     * SECONDS to blend camera position back to the follow target after the
+     * sequence completes (default 0.3; 0 = hard handoff, identical to 1.2.0).
+     * Step durations on the builder are MILLISECONDS -- different units. Zoom
+     * is not blended. Validated once at construction: a non-finite or negative
+     * value throws an Error with code "ERR_SEQUENCE_OPTIONS".
+     */
     blendOutTime?: number;
 }
 
@@ -41,6 +48,10 @@ export interface CameraSequence {
     readonly playing: boolean;
 }
 
+/**
+ * @throws Error `code = "ERR_SEQUENCE_OPTIONS"` if options.blendOutTime is
+ * non-finite or negative.
+ */
 export declare function createCameraSequence(cam: CinematicCameraPro, options?: CameraSequenceOptions): CameraSequence;
 export declare function panTo(
     cam: CinematicCameraPro,

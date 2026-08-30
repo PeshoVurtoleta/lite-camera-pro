@@ -11,7 +11,7 @@
 import { CinematicCameraPro } from '../../src/index.js';
 import { registerPreset, getPreset } from '../../src/index.js';
 import { PUBLIC_METHODS, callByName } from './public-surface.mjs';
-import { check, noopSink } from './harness.mjs';
+import { check, noopSink, rafCount, pumpRaf } from './harness.mjs';
 
 function expectDeadCode(fn, label) {
     let code;
@@ -121,6 +121,31 @@ export async function run() {
         check(getPreset('t4_ok') !== null, () => 'T4: a valid registerPreset must store the preset');
     }
 
-    // PRO3: re-playing a replaced sequence and mid-sequence stopSequence ticker
-    // release belong to the sequence-integrity session (CP-5), not here.
+    // --- PRO3/CP-5: replaced-sequence handling + mid-sequence stopSequence ---
+    // (F23: these were deferred to PRO3 in PRO0; now asserted.)
+    {
+        // Replacing an attached sequence destroys the old one (its timeline
+        // releases the shared ticker). Re-playing the REPLACED (destroyed)
+        // sequence is inert -- play() short-circuits on isDestroyed.
+        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 5);
+        const seqA = cam.createSequence().moveTo(200, 200, 800);
+        const seqB = cam.createSequence().moveTo(300, 300, 800);
+        cam.playSequence(seqA);
+        pumpRaf();
+        cam.playSequence(seqB);       // seqA destroyed here (ownership transfer)
+        pumpRaf();
+        seqA.play();                  // must be a no-op: seqA is destroyed
+        check(seqA.playing === false, () => 'T4/CP-5: re-playing a replaced (destroyed) sequence must be inert');
+        check(cam.sequencePlaying === true && cam._seq === seqB,
+            () => 'T4/CP-5: the live sequence must remain seqB after a replaced-seq replay attempt');
+
+        // Mid-sequence stopSequence() must release the shared ticker: after it,
+        // pumping produces no new RAF requests (nothing live re-requests).
+        cam.stopSequence();
+        const c0 = rafCount();
+        pumpRaf(); pumpRaf(); pumpRaf(); pumpRaf();
+        check(rafCount() === c0,
+            () => `T4/CP-5: mid-sequence stopSequence left a live ticker (rafCount grew by ${rafCount() - c0})`);
+        cam.destroy();
+    }
 }

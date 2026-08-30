@@ -12,8 +12,9 @@
  */
 
 import { GcProfiler, checkNoGc } from '@zakkster/lite-gc-profiler';
+import { createTimeline } from '@zakkster/lite-timeline';
 import { createShakeState, computeShake } from '../../src/index.js';
-import { die } from './harness.mjs';
+import { die, rafCount, pumpRaf } from './harness.mjs';
 
 /** Retained sink so the control's allocations survive GC (heapUsed grows). */
 const leak = [];
@@ -36,6 +37,29 @@ export async function run() {
             die('T9 doors-disabled control: a NaN-trauma active slot produced a FINITE ' +
                 'offsetX -- the T1/regressions finite-check detector is vacuous');
         }
+    }
+
+    // Leaked-ticker control (D-e/F22): prove the T7 conservation gate is NOT
+    // vacuous. Build the PRE-FIX stop() shape in-process -- a live timeline that
+    // is reset() instead of destroy()ed, so the shared ticker keeps running --
+    // and confirm pumping its stored RAF callback DOES grow rafCount(). If it
+    // did not, pumpRaf() would be inert and t7's `delta == 0` assertion would
+    // pass on a leaked build too (decorative). Then destroy() for real so the
+    // shared-ticker refcount returns to 0 (T9 runs after T7; leave it clean).
+    {
+        const tl = createTimeline({});                 // acquires + starts the shared ticker
+        tl.add({ duration: 1000, onUpdate() {} });     // a dummy track to advance
+        tl.play();                                     // attaches update; ticker live
+        const before = rafCount();
+        const fired = pumpRaf();                       // live _tick re-requests -> +1
+        const after = rafCount();
+        if (!fired || after <= before) {
+            die('T9 leaked-ticker control: pumping a live (reset-not-destroyed) ticker did ' +
+                'NOT grow rafCount (fired=' + fired + ' delta=' + (after - before) + ') -- ' +
+                'the T7 conservation gate cannot fail');
+        }
+        tl.reset();     // pre-fix stop() shape: detaches update but holds the ticker ref
+        tl.destroy();   // real cleanup: releases the ref, ticker destroyed, slot cleared
     }
 
     // Control: a hot body that RETAINS an allocation every iteration must be

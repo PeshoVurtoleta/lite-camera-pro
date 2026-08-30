@@ -40,8 +40,28 @@ export async function run() {
     const layersRef = cam._parallax.layers;
     const layerCount = cam._parallax.layers.length;
 
+    // A3 (OWNER NOTE 3): exercise the blend-armed step-6 branch under the SAME
+    // budget. The honest way without a real RAF clock: arm the camera's
+    // _blendRemain directly at a fixed point in the loop -- exactly the field
+    // update()'s completion cleanup writes -- and let it glide down to a landing
+    // over a contiguous window. 90/60 s of budget at dt=1/60 keeps the blend
+    // branch armed for ~90 consecutive frames (>= 60), covering both the glide
+    // sub-branch and the exact-land sub-branch, then the plain lerp resumes.
+    const BLEND_ARM_AT = 1000;
+    let blendFrames = 0;
+
+    // Collect prior-tier garbage BEFORE opening the measured window. T6 gates on
+    // ITS OWN allocation (maxMajor:0 across the 200k loop); a major GC triggered
+    // by an earlier tier's dead objects (e.g. T3's sequence-spam timelines) is
+    // not T6's allocation and must not be charged to it. This does not widen the
+    // budget -- it isolates the measurement to this tier's hot loop.
+    globalThis.gc?.();
+    await new Promise((r) => setTimeout(r, 50));
+
     const gc = new GcProfiler().start();
     for (let i = 0; i < HOT; i++) {
+        if (i === BLEND_ARM_AT) cam._blendRemain = 90 / 60;
+        if (cam._blendRemain > 0) blendFrames++;
         cam.update(1 / 60, 1000 + (i & 1023), 800 + (i & 511), 1, 0);
         // Keep the shake branch hot: re-arm the moment it sleeps.
         if (!cam._shake.active) cam.shakePreset('explosion');
@@ -51,6 +71,10 @@ export async function run() {
         if ((i & 8191) === 0) {
             gc.sampleHeap(performance.now(), process.memoryUsage().heapUsed);
         }
+    }
+
+    if (blendFrames < 60) {
+        die('T6: blend-armed coverage was ' + blendFrames + ' frames (< 60) -- the A3 phase did not run');
     }
 
     await new Promise((r) => setTimeout(r, 50));

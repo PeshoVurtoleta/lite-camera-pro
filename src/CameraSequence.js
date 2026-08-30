@@ -20,17 +20,56 @@ import {addShake} from './ShakeEngine.js';
 import {getPreset} from './ShakePresets.js';
 
 /**
+ * Resolve a lite-timeline `at` position from a step's options.
+ *
+ * Prefers `opts.at`; falls back to `alt.at` so the 2-arg `shake(name, {at})`
+ * form still works (there `alt` is the intensity argument). Guards against
+ * `typeof null === 'object'` and treats `at: 0` as a valid absolute position --
+ * `opts && opts.at || undefined` (the old five-builder form) dropped `at: 0`
+ * to append (CP-11). `at: undefined` behaves as omitted; `at: null` is passed
+ * through and ignored by lite-timeline (append), documented as such.
+ *
+ * Build-time only -- never called on the frame hot path.
+ *
+ * @param {Object|undefined} opts   Step options bag
+ * @param {*} [alt]                 Fallback carrier (shake's intensity arg)
+ * @returns {string|number|undefined}
+ */
+function resolveAt(opts, alt) {
+    if (opts !== null && typeof opts === 'object' && opts.at !== undefined) return opts.at;
+    if (alt !== null && typeof alt === 'object' && alt.at !== undefined) return alt.at;
+    return undefined;
+}
+
+/**
  * Create a new camera sequence.
  *
  * The sequence does NOT play automatically — call .play() on the camera
  * or let playSequence() handle it.
  *
+ * Units: step durations (moveTo/zoomTo/wait/...) are MILLISECONDS (timeline
+ * units). blendOutTime is SECONDS (class-API units) -- it integrates against
+ * update(dt) seconds. Do not mix them.
+ *
+ * On completion the camera blends its position back to the follow target over
+ * blendOutTime seconds (0 = a hard handoff, identical to 1.2.0). Zoom is NOT
+ * blended -- there is no follow-side zoom target to return to, so the
+ * sequence's final zoom persists. A blend is only visible in follow modes that
+ * lerp position (SMOOTH, PREDICTIVE); LOCK, CUT, and HYBRID with a locked
+ * vertical write pos directly, so the glide is invisible in those modes (F17).
+ * stop()/stopSequence() never blend (hard handoff). Looping sequences never
+ * complete, so they never blend.
+ *
  * @param {CinematicCameraPro} cam  The camera to control
  * @param {Object} [options]
  * @param {boolean} [options.loop=false]       Loop the sequence
  * @param {Function} [options.onComplete]      Called when sequence finishes
- * @param {number} [options.blendOutTime=0.3]  Seconds to blend back to follow after sequence ends
+ * @param {number} [options.blendOutTime=0.3]  SECONDS to blend camera position
+ *   back to follow after the sequence completes (0 = hard handoff). Step
+ *   durations on this same builder are MILLISECONDS -- different units.
  * @returns {CameraSequence}
+ * @throws {Error} code "ERR_SEQUENCE_OPTIONS" if blendOutTime is non-finite or
+ *   negative (validated once at construction, a cold setup-time door).
  *
  * @example
  * const seq = createCameraSequence(camera)
@@ -49,6 +88,20 @@ export function createCameraSequence(cam, options = {}) {
         onComplete = null,
         blendOutTime = 0.3,
     } = options;
+
+    // ── Fail-closed door (cold, setup-time): blendOutTime is SECONDS
+    // (class-API units) -- it integrates against update(dt) seconds. Step
+    // durations on this same builder are MILLISECONDS (timeline units).
+    // 0 is legal (a hard handoff to follow, the 1.2.0 behavior exactly);
+    // a non-finite or negative window is rejected loud, never silently
+    // clamped (PRO2 doctrine).
+    if (!Number.isFinite(blendOutTime) || blendOutTime < 0) {
+        const e = new Error(
+            'blendOutTime must be a finite number >= 0 seconds (got ' +
+            String(blendOutTime) + ')');
+        e.code = 'ERR_SEQUENCE_OPTIONS';
+        throw e;
+    }
 
     // ── Snapshot: captured when play() is called ──
     let snapX = 0;
@@ -70,6 +123,11 @@ export function createCameraSequence(cam, options = {}) {
         y: 0,
         zoom: 1,
         active: false,
+        // Blend-out budget in SECONDS (0 = hard handoff). update() reads this
+        // as the completion-vs-stop discriminator: the onComplete wrapper arms
+        // it to blendOutTime; stop() and destroy() zero it. See
+        // decisions/0003-blend-out.md.
+        blend: 0,
     };
 
     // ─────────────────────────────────────────────────────
@@ -109,6 +167,11 @@ export function createCameraSequence(cam, options = {}) {
             onComplete: () => {
                 isPlaying = false;
                 state.active = false;
+                // Arm the blend-back-to-follow window (SECONDS). update()'s
+                // cleanup branch copies this into the camera's _blendRemain,
+                // then nulls _seq -- so completion glides back to follow while
+                // stop()/destroy() (which zero state.blend) hand off hard.
+                state.blend = blendOutTime;
                 if (onComplete) onComplete();
             },
         });
@@ -228,7 +291,7 @@ export function createCameraSequence(cam, options = {}) {
          */
         moveTo(x, y, duration, opts) {
             const ease = opts && opts.ease || null;
-            const at = opts && opts.at || undefined;
+            const at = resolveAt(opts);
             pushStep('moveTo', {x, y, duration, ease}, at);
             return seq;
         },
@@ -245,7 +308,7 @@ export function createCameraSequence(cam, options = {}) {
          */
         zoomTo(level, duration, opts) {
             const ease = opts && opts.ease || null;
-            const at = opts && opts.at || undefined;
+            const at = resolveAt(opts);
             pushStep('zoomTo', {level, duration, ease}, at);
             return seq;
         },
@@ -265,7 +328,7 @@ export function createCameraSequence(cam, options = {}) {
          */
         moveAndZoom(x, y, level, duration, opts) {
             const ease = opts && opts.ease || null;
-            const at = opts && opts.at || undefined;
+            const at = resolveAt(opts);
             pushStep('moveAndZoom', {x, y, level, duration, ease}, at);
             return seq;
         },
@@ -294,15 +357,10 @@ export function createCameraSequence(cam, options = {}) {
 
             const int = (typeof intensity === 'number') ? intensity : 1;
 
-            // Resolve `at`: prefer opts.at, then fall back to intensity.at if the
-            // caller used the 2-arg form `shake(name, { at: ... })`. Guard
-            // against `typeof null === 'object'` and treat `at: 0` as valid.
-            let at;
-            if (opts && opts.at !== undefined) {
-                at = opts.at;
-            } else if (intensity !== null && typeof intensity === 'object' && intensity.at !== undefined) {
-                at = intensity.at;
-            }
+            // Resolve `at`: prefer opts.at, else fall back to intensity.at for the
+            // 2-arg form `shake(name, { at: ... })`. resolveAt guards null and
+            // honors `at: 0` (CP-11).
+            const at = resolveAt(opts, intensity);
 
             pushStep('shake', {profile, intensity: int}, at);
             return seq;
@@ -317,7 +375,7 @@ export function createCameraSequence(cam, options = {}) {
          * @returns {CameraSequence} this
          */
         wait(duration, opts) {
-            const at = opts && opts.at || undefined;
+            const at = resolveAt(opts);
             pushStep('wait', {duration}, at);
             return seq;
         },
@@ -335,9 +393,16 @@ export function createCameraSequence(cam, options = {}) {
          * seq.moveTo(boss.x, boss.y, 1000)
          *    .call(() => boss.startPhase2())
          *    .shake('heavy_impact');
+         *
+         * NOTE (CP-20, unguarded -- routed to PRO4): .call(fn), shake steps, the
+         * onComplete callback, and seek() all run user code SYNCHRONOUSLY from
+         * inside the timeline tick. Calling cam.destroy(), seq.destroy(), or
+         * seq.stop() re-entrantly from one of those callbacks is not guarded in
+         * 1.3.0 -- it can null the timeline mid-iteration. Defer such teardown to
+         * the next frame until PRO4 lands the re-entrancy guard.
          */
         call(fn, opts) {
-            const at = opts && opts.at || undefined;
+            const at = resolveAt(opts);
             pushStep('callback', {fn}, at);
             return seq;
         },
@@ -363,21 +428,50 @@ export function createCameraSequence(cam, options = {}) {
             return seq;
         },
 
-        /** Resume after pause. */
+        /**
+         * Resume after pause. Guarded to the PAUSED state only: pause() leaves
+         * isPlaying true, while stop() and completion clear it, so the predicate
+         * `timeline && isPlaying` is exactly "paused". Resuming a stopped or
+         * completed sequence is a no-op -- otherwise a completed timeline would
+         * auto-seek(0) and REPLAY the whole cinematic, re-firing every .call(fn)
+         * and shake step on the live camera (a real mutation, not cosmetics).
+         * Use play() to deliberately replay from a fresh snapshot.
+         */
         resume() {
-            if (timeline) timeline.play();
+            if (timeline && isPlaying) timeline.play();
             return seq;
         },
 
-        /** Stop the sequence and return camera to follow mode. */
+        /**
+         * Stop the sequence and return camera to follow mode. Destroys the
+         * timeline (releasing the shared ticker refcount -- CP-5; reset() alone
+         * detached the update callback but pinned the RAF loop forever) and
+         * cancels any pending blend-out (a hard handoff, no glide). play()
+         * rebuilds from a fresh snapshot, so a stopped sequence is replayable.
+         *
+         * NOTE (CP-24): natural COMPLETION does not release the ticker -- a
+         * completed sequence keeps its built timeline (and the shared-ticker
+         * refcount) until you call stop(), destroy(), or play() again. Release
+         * long-lived completed sequences explicitly.
+         */
         stop() {
-            if (timeline) timeline.reset();
+            if (timeline) {
+                timeline.destroy();
+                timeline = null;
+            }
             isPlaying = false;
             state.active = false;
+            state.blend = 0;
             return seq;
         },
 
-        /** Jump to a specific time (ms). */
+        /**
+         * Jump to a specific time (ms). If the timeline was destroyed (after
+         * stop() or before the first play()), this rebuilds it from a FRESH
+         * camera snapshot, then seeks. NOTE: lite-timeline's seek() fires the
+         * onUpdate/onComplete of every track it crosses -- including duration-0
+         * shake and .call(fn) steps -- so seeking runs user code synchronously.
+         */
         seek(timeMs) {
             if (!timeline) buildTimeline();
             if (timeline) timeline.seek(timeMs);
@@ -387,7 +481,10 @@ export function createCameraSequence(cam, options = {}) {
         /**
          * Total sequence duration in ms. Computed from queued steps —
          * does NOT build the timeline or take a camera snapshot.
-         * Caveat: `at`-positioned overlaps are not accounted for.
+         * Caveat: `at`-positioned overlaps are not accounted for -- while a
+         * timeline is live this returns its at-aware duration, but after stop()
+         * (timeline destroyed) it falls back to the naive step-sum, so an
+         * `at:'+=100'` build reads 1600 while playing and 1500 after stop().
          */
         get duration() {
             if (timeline) return timeline.duration;
@@ -418,6 +515,7 @@ export function createCameraSequence(cam, options = {}) {
             timeline = null;
             state.active = false;
             isPlaying = false;
+            state.blend = 0;
             steps.length = 0;
         },
 
@@ -427,9 +525,6 @@ export function createCameraSequence(cam, options = {}) {
 
         /** @internal */
         _state: state,
-
-        /** @internal */
-        _blendOutTime: blendOutTime,
     };
 
     return seq;
@@ -474,7 +569,12 @@ export function dramaticZoom(cam, x, y, zoom, duration, opts) {
  * @param {CinematicCameraPro} cam
  * @param {number} x           Boss world X
  * @param {number} y           Boss world Y
- * @param {number} [totalMs=3000]  Total sequence duration
+ * Caveat: the return pose (startX/startY) is captured at BUILD time from the
+ * camera's current center, NOT at play time. If the camera has moved between
+ * building and playing this sequence, the final leg returns to the old center.
+ * Build it immediately before playSequence() for a correct return.
+ *
+ * @param {number} [totalMs=3000]  Total sequence duration in ms
  * @param {Object} [opts]
  * @returns {CameraSequence}
  */
