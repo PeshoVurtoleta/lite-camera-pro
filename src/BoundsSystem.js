@@ -1,13 +1,13 @@
 /**
- * @zakkster/lite-camera-pro — Smart Bounds System
+ * @zakkster/lite-camera-pro -- Smart Bounds System
  *
  * Replaces hard edge clamping with configurable per-edge behavior.
  *
  * Boundary types:
- *   HARD    — stops at edge (default, same as lite-camera base)
+ *   HARD    -- stops at edge (default, same as lite-camera base)
  *   SOFT    -- decelerates as it nears the edge, holding a half-zone back
- *   ELASTIC — allows slight overshoot, springs back
- *   NONE    — no boundary enforcement
+ *   ELASTIC -- allows slight overshoot, springs back
+ *   NONE    -- no boundary enforcement
  *
  * Zero allocations. All state is pre-allocated on the camera.
  *

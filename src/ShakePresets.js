@@ -1,5 +1,5 @@
 /**
- * @zakkster/lite-camera-pro — Shake Presets
+ * @zakkster/lite-camera-pro -- Shake Presets
  *
  * Frozen profile objects for common game shake scenarios.
  * Each preset is a plain object matching the ShakeEngine profile shape.
@@ -8,12 +8,12 @@
  * Zero dependencies. Pure data.
  */
 
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 //  BUILT-IN PRESETS
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 
 /**
- * EXPLOSION — Big boom. High trauma, low frequency for heavy sway,
+ * EXPLOSION -- Big boom. High trauma, low frequency for heavy sway,
  * large offset, medium rotation. Slow decay for lingering feel.
  */
 export const EXPLOSION = Object.freeze({
@@ -27,7 +27,7 @@ export const EXPLOSION = Object.freeze({
 });
 
 /**
- * EARTHQUAKE — Sustained rumble. Medium trauma, very low frequency
+ * EARTHQUAKE -- Sustained rumble. Medium trauma, very low frequency
  * for slow, heavy rolling. Large offset, minimal rotation. Slow decay.
  */
 export const EARTHQUAKE = Object.freeze({
@@ -41,7 +41,7 @@ export const EARTHQUAKE = Object.freeze({
 });
 
 /**
- * RECOIL — Gun/weapon kickback. Directional (upward by default).
+ * RECOIL -- Gun/weapon kickback. Directional (upward by default).
  * Short, sharp burst with fast decay.
  */
 export const RECOIL = Object.freeze({
@@ -55,7 +55,7 @@ export const RECOIL = Object.freeze({
 });
 
 /**
- * IMPACT — Something hit the player/world. Sharp trauma spike,
+ * IMPACT -- Something hit the player/world. Sharp trauma spike,
  * high frequency for a snappy jolt, fast decay.
  */
 export const IMPACT = Object.freeze({
@@ -69,7 +69,7 @@ export const IMPACT = Object.freeze({
 });
 
 /**
- * LANDING — Player lands from a height. Vertical-only shake.
+ * LANDING -- Player lands from a height. Vertical-only shake.
  * Medium trauma, medium frequency, moderate decay.
  */
 export const LANDING = Object.freeze({
@@ -83,7 +83,7 @@ export const LANDING = Object.freeze({
 });
 
 /**
- * DAMAGE — Player takes a hit. Quick pulse, low offset,
+ * DAMAGE -- Player takes a hit. Quick pulse, low offset,
  * no rotation. Feels like a screen flash without the flash.
  */
 export const DAMAGE = Object.freeze({
@@ -97,7 +97,7 @@ export const DAMAGE = Object.freeze({
 });
 
 /**
- * RUMBLE — Continuous low-level vibration. Low trauma, high frequency
+ * RUMBLE -- Continuous low-level vibration. Low trauma, high frequency
  * for a "motor hum" feel. Very slow decay (lingers).
  * Good for approaching boss, earthquake precursor, engine vibration.
  */
@@ -112,7 +112,7 @@ export const RUMBLE = Object.freeze({
 });
 
 /**
- * HEAVY_IMPACT — Boss stomp, meteor hit, critical attack.
+ * HEAVY_IMPACT -- Boss stomp, meteor hit, critical attack.
  * Maximum everything. The "oh no" shake.
  */
 export const HEAVY_IMPACT = Object.freeze({
@@ -125,9 +125,9 @@ export const HEAVY_IMPACT = Object.freeze({
     dirY:      0,
 });
 
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 //  PRESET REGISTRY
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 
 /** @type {Object<string, Object>} */
 const _registry = {

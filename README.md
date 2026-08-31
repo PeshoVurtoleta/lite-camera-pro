@@ -9,781 +9,642 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-Types-informational)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-### Cinematic Camera System for Canvas2D Games
+> Cinematic Canvas2D camera for games. The class you ship, the subsystems you
+> opt into. Zero garbage collection in the update/render hot path.
 
-> Zero-GC. Zero external deps. Framework-agnostic.
-> The class you ship, the subsystems you opt into.
+## The cinematic layer the camera stack was missing
 
-**Full TypeScript -- 348 tests -- detached by design: a class-only camera is 17.68 KB gz (was 24.49 KB before 2.0.0)**
+`@zakkster/lite-camera` gives you follow, deadzone, lookahead and a basic RNG
+shake -- enough to prototype. `lite-camera-pro` is what you reach for when the
+prototype becomes a product: the boss reveal that zooms in, shakes, holds and
+swoops back; the co-op mode that frames both players; the parallax depth; the
+platformer camera that is smooth horizontally and pixel-locked vertically; the
+explosion that layers three shakes at once. All of it runs at 60fps with zero
+allocation in the frame loop.
+
+The engine is what a real consumer shipped a win-modal screen shake on, replacing
+six hand-authored GSAP keyframes (see [Why this exists](#why-this-exists)). The
+2.0.0 detach then made the class stop paying for subsystems it never calls: a
+class-only camera is 17.60 KB gz and pulls in none of parallax, sequences, the
+debug HUD or `lite-timeline`.
 
 ```
 npm install @zakkster/lite-camera-pro
 ```
 
-v2.0.0 detach: parallax, timeline sequences and the debug HUD are no longer
-bundled into the class -- opt in per instance with `withParallax` / `withSequences`
-/ `withDebug` from their subpaths. A class-only consumer ships none of them (nor
-`lite-timeline`). See the [migration table](#migration-from-1x-to-200).
-
-Need only screen shake? Import the `./shake` subpath and pull just the engine +
-presets (3.09 KB gz -- esm, unminified, gzip -9):
-
-```js
-import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
-```
-
----
-
-## Why Pro?
-
-You already ship games with `@zakkster/lite-camera`. It handles follow, deadzone, lookahead, and basic shake. That's enough to prototype.
-
-**lite-camera-pro** is what you reach for when the prototype becomes a product:
-
-- The boss reveal that zooms in, shakes, holds, then swoops back
-- The co-op mode where the camera frames both players automatically
-- The parallax layers that scroll at different depths
-- The platformer camera that's smooth horizontally but pixel-locked vertically
-- The explosion that layers three different shakes simultaneously
-
-All of it runs at 60fps with **zero garbage collection** in the hot path.
-
----
-
-## Architecture
-
-```mermaid
-graph TB
-    subgraph "@zakkster/lite-camera-pro"
-        Core["CinematicCameraPro<br/><i>894 lines · main class</i>"]
-        Follow["FollowMode<br/><i>179 lines · 5 strategies</i>"]
-        Multi["MultiTarget<br/><i>125 lines · bbox framing</i>"]
-        Shake["ShakeEngine<br/><i>286 lines · 8-slot noise pool</i>"]
-        Presets["ShakePresets<br/><i>177 lines · 8 built-in profiles</i>"]
-        Seq["CameraSequence<br/><i>513 lines · timeline cinematics</i>"]
-        Parallax["ParallaxManager<br/><i>199 lines · 16 layers</i>"]
-        Bounds["BoundsSystem<br/><i>220 lines · per-edge behavior</i>"]
-        Debug["DebugHUD<br/><i>290 lines · toggleable overlay</i>"]
-    end
-
-    Core --> Follow
-    Core --> Multi
-    Core --> Shake
-    Core --> Seq
-    Core --> Parallax
-    Core --> Bounds
-    Core --> Debug
-    Shake --> Presets
-
-    style Core fill:#fbbf24,stroke:#92400e,color:#000
-    style Seq fill:#a78bfa,stroke:#5b21b6,color:#000
-    style Shake fill:#ef4444,stroke:#991b1b,color:#fff
-    style Follow fill:#22d3ee,stroke:#155e75,color:#000
-    style Multi fill:#34d399,stroke:#065f46,color:#000
-    style Parallax fill:#34d399,stroke:#065f46,color:#000
-    style Bounds fill:#22d3ee,stroke:#155e75,color:#000
-    style Presets fill:#f87171,stroke:#991b1b,color:#000
-    style Debug fill:#6b7280,stroke:#374151,color:#fff
-```
-
-Every module is a separate file. Tree-shaking drops what you don't use.
-
----
-
-## Dependency Graph
-
-```mermaid
-graph LR
-    Pro["lite-camera-pro"]
-    Cam["lite-camera"]
-    Ease["lite-ease"]
-    Lerp["lite-lerp"]
-    Noise["lite-noise"]
-    TL["lite-timeline"]
-
-    Pro --> Cam
-    Pro --> Ease
-    Pro --> Lerp
-    Pro --> Noise
-    Pro --> TL
-
-    style Pro fill:#fbbf24,stroke:#92400e,color:#000,stroke-width:2px
-    style Cam fill:#1e1e2e,stroke:#fbbf24,color:#fbbf24
-    style Ease fill:#1e1e2e,stroke:#a78bfa,color:#a78bfa
-    style Lerp fill:#1e1e2e,stroke:#34d399,color:#34d399
-    style Noise fill:#1e1e2e,stroke:#ef4444,color:#ef4444
-    style TL fill:#1e1e2e,stroke:#a78bfa,color:#a78bfa
-```
-
-All `@zakkster` packages. Zero third-party dependencies in the final bundle.
-
----
-
-## lite-camera vs lite-camera-pro
-
-| Feature | lite-camera | lite-camera-pro |
-|:---|:---:|:---:|
-| Smooth follow + deadzone + lookahead | ✓ | ✓ |
-| Basic RNG shake | ✓ | — |
-| Canvas transform apply | ✓ | ✓ |
-| Debug rectangle | ✓ | ✓ |
-| | | |
-| **Zoom** (smooth, eased, anchor-point) | | ✓ |
-| **Dynamic zoom-at-target** (tracks moving objects) | | ✓ |
-| **5 follow modes** (smooth / lock / predictive / cut / hybrid) | | ✓ |
-| **Multi-target auto-framing** (bounding box + auto-zoom) | | ✓ |
-| **Noise-based shake** (simplex, 8 simultaneous layers) | | ✓ |
-| **Directional shake** (recoil, landing, per-axis) | | ✓ |
-| **8 shake presets** + custom registry | | ✓ |
-| **Cinematic sequences** (timeline-driven camera moves) | | ✓ |
-| **Fluent sequence builder** (moveTo · zoomTo · shake · wait · call) | | ✓ |
-| **Sequence presets** (panTo · dramaticZoom · bossReveal) | | ✓ |
-| **Parallax layer manager** (16 layers, per-layer speed) | | ✓ |
-| **Smart bounds** (hard / soft / elastic / none — per-edge) | | ✓ |
-| **Dynamic bounds** (room transitions, arenas) | | ✓ |
-| **Pro debug HUD** (toggleable panels, trauma bars, sequence progress) | | ✓ |
-| **Zero-alloc coordinate conversion** (screenToWorld / worldToScreen) | | ✓ |
-| **Save / Load** (getState / setState) | | ✓ |
-| **TypeScript declarations** | | ✓ |
-
----
-
-## Quick Start
-
 ```js
 import { CinematicCameraPro, FollowMode } from '@zakkster/lite-camera-pro';
-// v2.0.0: opt into the subsystems you use, from their subpaths.
-import { withDebug } from '@zakkster/lite-camera-pro/debug';
 
 const cam = new CinematicCameraPro(
-    canvas.width,   // viewport width
-    canvas.height,  // viewport height
-    WORLD_W,        // world width
-    WORLD_H         // world height
+    canvas.width, canvas.height,   // viewport
+    WORLD_W, WORLD_H               // world
 );
-withDebug(cam);     // installs cam.debug/cam.debugHUD (+ withParallax / withSequences as needed)
 
-// ── Game loop ──
 function update(dt) {
     cam.update(dt, player.x, player.y, player.vx, player.vy);
 }
 
 function render(ctx) {
     ctx.save();
-    cam.apply(ctx);       // transforms the canvas
+    cam.apply(ctx);       // translate + scale + rotate the canvas (shake included)
     drawWorld(ctx);
-    cam.debug(ctx);       // world-space overlay (needs withDebug)
     ctx.restore();
-    cam.debugHUD(ctx);    // screen-space HUD (needs withDebug)
 }
+
+cam.setMode(FollowMode.HYBRID);   // smooth-X, locked-Y
+cam.addTrauma(0.5);               // instant kick
+cam.setZoom(2.0, 0.5);            // eased zoom to 2x over 0.5s
 ```
 
 A camera that only follows and shakes needs no attach at all -- `update`,
 `apply`, `shake`, `setZoom`, `trackMultiple`, bounds and coordinate conversion
-are all on the class.
-
----
-
-## Feature Guide
-
-### Follow Modes
-
-```mermaid
-stateDiagram-v2
-    direction LR
-    SMOOTH --> LOCK : setMode()
-    SMOOTH --> PREDICTIVE : setMode()
-    SMOOTH --> CUT : setMode()
-    SMOOTH --> HYBRID : setMode()
-    LOCK --> SMOOTH : setMode()
-    PREDICTIVE --> SMOOTH : setMode()
-    CUT --> SMOOTH : setMode()
-    HYBRID --> SMOOTH : setMode()
-
-    note right of SMOOTH : Deadzone + lookahead + lerp<br/>Default. Good for everything.
-    note right of LOCK : Instant snap. No interpolation.<br/>Top-down shooters.
-    note right of PREDICTIVE : Velocity extrapolation.<br/>Racing games, fast runners.
-    note right of CUT : Hard jump. Zero lerp.<br/>Cutscene transitions.
-    note right of HYBRID : Smooth-X, locked-Y.<br/>Platformer standard.
-```
-
-Switch mid-gameplay. No position jumps (except CUT, which jumps by design).
+are all on the class. Need only screen shake? Import the `./shake` subpath and
+pull the engine plus presets (3.07 KB gz -- esm, unminified, gzip -9):
 
 ```js
-cam.setMode(FollowMode.SMOOTH);      // deadzone + lookahead + lerp
+import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
+```
+
+## Table of contents
+
+- [The cinematic layer the camera stack was missing](#the-cinematic-layer-the-camera-stack-was-missing)
+- [Why this exists](#why-this-exists)
+- [What you get](#what-you-get)
+- [The shake engine](#the-shake-engine)
+- [API reference](#api-reference)
+- [Composability with the ecosystem](#composability-with-the-ecosystem)
+- [Zero-GC design notes](#zero-gc-design-notes)
+- [Design decisions worth knowing](#design-decisions-worth-knowing)
+- [Migration](#migration)
+- [Testing](#testing)
+- [What this is not](#what-this-is-not)
+- [Ecosystem](#ecosystem)
+- [License](#license)
+
+## Why this exists
+
+Three problems this package was built to close, each surfaced by a shipping
+consumer -- the Las Vegas scratch-card game whose win-modal shake replaced six
+GSAP keyframes:
+
+1. **A shake engine you cannot reach standalone.** The tree-shakeable functional
+   API (`createShakeState`, `addShake`, `updateShake`, `computeShake`) was
+   documented but exported one file too low, so every function took a state no
+   consumer could construct. Fixed: the root surface and the `./shake` subpath
+   both expose it (`createShakeState` is the entry point).
+2. **A class that pays for everything.** A bundler cannot tree-shake a reachable
+   class method, so a consumer that imported `CinematicCameraPro` for its shake
+   shipped parallax, sequences, the debug HUD and all of `lite-timeline` too --
+   measured at 73.5 KB gz of dead weight. The 2.0.0 detach severs those four
+   from the class and the root barrel; they return per instance on their
+   subpaths.
+3. **A preset you cannot shorten.** A preset's on-screen duration is welded to
+   `trauma / decay`, and `intensity` scales trauma -- so amplitude and duration
+   move together. The escape hatch (a hand-written profile with a higher `decay`)
+   is documented directly under the [preset table](#shake).
+
+**The dependency story.** `lite-camera-pro` has five runtime dependencies and
+every one is first-party `@zakkster`: `lite-camera` (the base `CinematicCamera`),
+`lite-ease`, `lite-lerp`, `lite-noise` and `lite-timeline`. There are zero
+third-party packages in the final bundle. `lite-timeline` is reached ONLY through
+the `./sequence` subpath -- a class-only consumer ships none of it. The
+multi-file `src/` layout and these first-party floors are the two deliberate
+departures from suite single-file law, recorded and justified in
+[decisions/0001](decisions/0001-layout-and-deps.md).
+
+## What you get
+
+Everything `lite-camera` does, plus the cinematic layer on top:
+
+| Capability | lite-camera | lite-camera-pro |
+|:---|:---:|:---:|
+| Smooth follow + deadzone + lookahead | yes | yes |
+| Canvas transform apply | yes | yes |
+| Basic RNG shake | yes | (replaced by the noise engine) |
+| Smooth eased zoom + anchor-point zoom | -- | yes |
+| Dynamic zoom-at-a-moving-target | -- | yes |
+| 5 follow modes (smooth / lock / predictive / cut / hybrid) | -- | yes |
+| Multi-target auto-framing (bounding box + auto-zoom) | -- | yes |
+| Noise-based shake, 8 simultaneous summed slots | -- | yes |
+| Directional shake (recoil, landing, per-axis) | -- | yes |
+| 8 shake presets + custom registry | -- | yes |
+| Cinematic timeline sequences (`./sequence`) | -- | yes |
+| Fluent sequence builder + sequence presets | -- | yes |
+| Parallax layer manager, 16 layers + tile wrap (`./parallax`) | -- | yes |
+| Smart bounds: hard / soft / elastic / none, per-edge | -- | yes |
+| Dynamic bounds (room transitions, arenas) | -- | yes |
+| Pro debug HUD, toggleable panels (`./debug`) | -- | yes |
+| Zero-alloc coordinate conversion (screenToWorld / worldToScreen) | -- | yes |
+| Save / load pose (getState / setState) | -- | yes |
+| Full TypeScript declarations | -- | yes |
+
+The class carries the core (follow, zoom, shake, multi-target, bounds,
+coordinate conversion, save/load). Parallax, sequences and debug are opt-ins you
+attach per instance with `withParallax` / `withSequences` / `withDebug`.
+
+## The shake engine
+
+<details>
+<summary><b>The trauma model, the 8-slot pool, and reproducibility</b></summary>
+
+The shake is simplex-noise driven, not RNG, so it reads as smooth organic camera
+motion instead of per-frame jitter. Each active shake occupies a **slot** in a
+fixed pool of 8, and every slot carries its own `trauma`, `freq`, `decay`,
+`maxOffset`, `maxAngle` and direction. Every frame, all active slots are summed.
+
+- **`trauma^2` perceptual scaling.** Displacement scales with the square of
+  trauma, so a shake feels like it falls off sharply as it decays rather than
+  fading linearly -- the classic "trauma, not shake" curve.
+- **8 slots with steal.** `addShake` takes the first inactive slot; when all 8
+  are live it steals the one with the lowest trauma. Layering three shakes for
+  one explosion is just three `addShake` calls.
+- **`seedOffset = seed * 7919`.** Each camera offsets its noise sampling by its
+  constructor `seed` (default 42) times the prime 7919. Two cameras with
+  different seeds decorrelate -- they do not shake in lockstep.
+- **Determinism note.** The simplex permutation table is a GLOBAL singleton owned
+  by `lite-noise`, not per camera. Calling `seedNoise()` anywhere in the app
+  re-shapes the shake of every camera at once. The per-camera `seedOffset`
+  decorrelates cameras from each other but does NOT isolate any of them from a
+  global reseed. For reproducible shake, seed the global table once at startup
+  and leave it.
+
+**Tier ramp (a shipped consumer's).** The win-modal ramp was derived from the
+presets, and the peaks land where the preset arithmetic (`trauma / decay` for
+duration, `trauma^2 * maxOffset` for amplitude) says they should:
+
+| tier | source | peak px | peak deg | duration |
+|:---|:---|---:|---:|---:|
+| jackpot | `impact` @ 0.8 | 5.8 | 0.34 | 301 ms |
+| megaJackpot | `impact` @ 1.15 | 11.9 | 0.76 | 434 ms |
+| ultraJackpot | custom profile @ 1.0 | 35.7 | 2.11 | 651 ms |
+
+Provenance: consumer-derived (BRIEF), reproducible from preset arithmetic.
+
+</details>
+
+## API reference
+
+### The class
+
+```js
+new CinematicCameraPro(viewW, viewH, worldW, worldH, seed = 42)
+```
+
+Per frame: `cam.update(dt, playerX, playerY, playerVX = 0, playerVY = 0)`, then
+`ctx.save(); cam.apply(ctx); drawWorld(ctx); ctx.restore();`. `update()`
+dispatches by priority: active sequence > multi-target > single-target follow
+mode. `apply(ctx)` translates, scales and rotates the sink to the camera
+transform, shake included. `dt` and every duration argument follow the
+[units table](#units-seconds-vs-milliseconds).
+
+### Units: seconds vs milliseconds
+
+The class API speaks **seconds**; the sequence builder speaks **milliseconds**.
+Do not mix them. (Linked from [the class](#the-class) and [Sequences](#sequences).)
+
+| Seconds (class API) | Milliseconds (sequence builder) |
+|:---|:---|
+| `update(dt, ...)` | `moveTo(x, y, durationMs)` |
+| `maxDt` (default 0.1) | `zoomTo(level, durationMs)` |
+| `setZoom(level, duration)`, `zoomAt(..., duration)` | `moveAndZoom(x, y, level, durationMs)` |
+| `decay` (trauma per second) | `wait(ms)` |
+| `blendOutTime` (default 0.3) | `seek(ms)` |
+| `predictTime` (default 0.3) | `'+=n'` / `'-=n'` position grammar |
+
+### Follow modes
+
+```js
+cam.setMode(FollowMode.SMOOTH);      // deadzone + lookahead + lerp (default)
 cam.setMode(FollowMode.LOCK);        // instant snap, no interpolation
-cam.setMode(FollowMode.PREDICTIVE);  // velocity extrapolation
-cam.setMode(FollowMode.CUT);         // hard cut (cutscene transitions)
+cam.setMode(FollowMode.PREDICTIVE);  // velocity extrapolation (cam.predictTime seconds)
+cam.setMode(FollowMode.CUT);         // hard jump, zero lerp (cutscene transitions)
 cam.setMode(FollowMode.HYBRID);      // smooth horizontal, locked vertical
-
-// Predictive tuning
-cam.predictTime = 0.5; // seconds of velocity extrapolation
-
-// Hybrid tuning
-cam.hybridVerticalSnap = true;  // instant vertical (default)
-cam.hybridVerticalSnap = false; // fast-lerp vertical
+cam.hybridVerticalSnap = false;      // fast-lerp vertical instead of instant
 ```
 
----
-
-### Zoom System
+### Zoom + conversion
 
 ```js
-// Smooth zoom with easing
-cam.setZoom(2.0, 0.5, easeOutExpo);    // zoom to 2× over 0.5s
+cam.setZoom(2.0, 0.5, easeOutExpo);       // eased zoom to 2x over 0.5s
+cam.zoomAt(400, 300, 1.8, 0.8);           // zoom toward a static world point
+cam.zoomAt(boss, 1.8, 0.8);               // zoom toward a MOVING {x, y}, re-read each frame
+cam.minZoom = 0.25; cam.maxZoom = 4.0;    // clamp limits
+const w = cam.visibleW;                   // cached viewW / zoom (zero-alloc; use for culling)
 
-// Zoom toward a static world point
-cam.zoomAt(400, 300, 1.8, 0.8, easeOutExpo);
-
-// Zoom toward a MOVING target — anchor follows the object each frame
-cam.zoomAt(boss, 1.8, 0.8, easeOutExpo);
-
-// Zoom limits
-cam.minZoom = 0.25;
-cam.maxZoom = 4.0;
-
-// Read visible area (cached, zero-alloc — use for frustum culling)
-const w = cam.visibleW;  // viewW / zoom
-const h = cam.visibleH;  // viewH / zoom
-
-// Zoom-aware resize (v2.1.0). The four dims are readonly; resize() is the one
-// write path. visibleW/_maxX are correct on return (no stale frame) and the pose
-// is re-clamped into the zoom-aware box -- no yank. At zoom 2, a camera settled
-// at pos 2560 in a 3200x2400 world resized to view 1600x1200 lands pos 2400,
-// visibleW 800 (the inherited base resize alone yanks it to 1600 with a stale 400).
-cam.resize(1600, 1200, 3200, 2400);
-```
-
-**Coordinate conversion** (zero-alloc, caller-owned `out` pattern):
-```js
-const pt = { x: 0, y: 0 }; // allocate once at init
-cam.screenToWorld(mouseX, mouseY, pt);
+const pt = { x: 0, y: 0 };                // allocate once
+cam.screenToWorld(mouseX, mouseY, pt);    // mutates pt, returns pt
 cam.worldToScreen(enemy.x, enemy.y, pt);
+
+cam.resize(1600, 1200, 3200, 2400);       // zoom-aware; the four dims are readonly
 ```
 
----
-
-### Multi-Target Framing
-
-```mermaid
-graph LR
-    subgraph Viewport
-        direction TB
-        P1["Player 1"]
-        P2["Player 2"]
-        BB["Bounding Box<br/>+ padding"]
-    end
-
-    BB --> AutoZoom["Auto-Zoom<br/><i>fit bbox into viewport</i>"]
-    BB --> AutoCenter["Auto-Center<br/><i>track bbox midpoint</i>"]
-    AutoZoom --> Smooth["Exponential<br/>Damping"]
-    AutoCenter --> Smooth
-
-    style P1 fill:#fbbf24,stroke:#92400e,color:#000
-    style P2 fill:#22d3ee,stroke:#155e75,color:#000
-    style BB fill:none,stroke:#a78bfa,stroke-dasharray:5 5,color:#a78bfa
-    style AutoZoom fill:#a78bfa,stroke:#5b21b6,color:#000
-    style AutoCenter fill:#a78bfa,stroke:#5b21b6,color:#000
-    style Smooth fill:#34d399,stroke:#065f46,color:#000
-```
+### Multi-target
 
 ```js
-// Track two players — camera auto-zooms to keep both visible
 cam.trackMultiple([player1, player2], {
-    padding:    120,   // world-space padding around the bounding box
-    minZoom:    0.4,
-    maxZoom:    1.8,
-    zoomSpeed:  4.0,   // zoom smoothing (higher = snappier)
-    followSpeed: 5.0,  // position smoothing
+    padding: 120, minZoom: 0.4, maxZoom: 1.8, zoomSpeed: 4.0, followSpeed: 5.0,
 });
-
-// Add a third target dynamically
-cam.trackMultiple([player1, player2, boss], { padding: 100 });
-
-// Return to single-target follow (smooth transition)
-cam.trackSingle();
+cam.trackSingle();                        // back to single-target follow
 ```
 
----
-
-### Shake System
-
-```mermaid
-graph TB
-    subgraph "Shake Engine — 8 simultaneous slots"
-        S1["Slot 1<br/>EXPLOSION<br/>trauma=0.8"]
-        S2["Slot 2<br/>RECOIL ↑<br/>trauma=0.5"]
-        S3["Slot 3<br/>RUMBLE<br/>trauma=0.2"]
-        S4["Slot 4–8<br/><i>available</i>"]
-    end
-
-    S1 --> Sum["Sum All Layers"]
-    S2 --> Sum
-    S3 --> Sum
-    Sum --> Noise["Simplex Noise<br/><i>smooth, organic</i>"]
-    Noise --> Out["offsetX · offsetY · angle"]
-    Out --> Canvas["ctx.translate() + ctx.rotate()"]
-
-    style S1 fill:#ef4444,stroke:#991b1b,color:#fff
-    style S2 fill:#a78bfa,stroke:#5b21b6,color:#000
-    style S3 fill:#f97316,stroke:#9a3412,color:#000
-    style S4 fill:#374151,stroke:#4b5563,color:#9ca3af
-    style Noise fill:#fbbf24,stroke:#92400e,color:#000
-    style Sum fill:#1e1e2e,stroke:#6b7280,color:#d1d5db
-    style Out fill:#1e1e2e,stroke:#6b7280,color:#d1d5db
-    style Canvas fill:#1e1e2e,stroke:#6b7280,color:#d1d5db
-```
-
-Multiple shakes run simultaneously and sum together. Each slot has its own trauma, frequency, decay rate, and direction.
+### Shake
 
 ```js
-// Backward-compatible simple trauma
-cam.addTrauma(0.5);
-
-// v2.0.0: named presets moved to the ./shake subpath; cam.shakePreset was
-// dropped. Fetch a preset and fire it -- the guard is now OPTIONAL (getPreset
-// returns null on an unknown name, and v2.1.0 makes cam.shake(null) a documented
-// no-op; a non-object profile throws ERR_SHAKE_PROFILE).
-import { getPreset, registerPreset } from '@zakkster/lite-camera-pro/shake';
-
-const preset = (name, i = 1) => { const p = getPreset(name); if (p) cam.shake(p, i); };
-
-preset('explosion');       // big boom
-preset('earthquake');      // sustained rumble
-preset('recoil');          // directional upward kick
-preset('impact');          // sharp snappy jolt
-preset('landing');         // vertical downward push
-preset('damage');          // quick pulse, no rotation
-preset('rumble');          // continuous low vibration
-preset('heavy_impact');    // maximum everything
-
-// Custom profile (cam.shake is on the class -- no attach needed)
-cam.shake({
-    trauma:    0.6,
-    freq:      18,      // noise frequency (higher = jittery)
-    decay:     1.5,     // trauma units lost per second
-    maxOffset: 20,      // max pixel displacement
-    maxAngle:  0.03,    // max rotation (radians)
-    dirX:      1,       // directional X (0 = omnidirectional)
-    dirY:      0,       // directional Y
-});
-
-// Layer multiple shakes for complex events
-preset('explosion');
-preset('recoil', 0.7);  // half intensity
-preset('rumble');
-
-// Register custom presets (registry lives on ./shake)
-registerPreset('sword_clash', {
-    trauma: 0.3, freq: 28, decay: 3.0,
-    maxOffset: 8, maxAngle: 0.03,
-    dirX: 1, dirY: 0,
-});
-
-preset('sword_clash');
-
-// Stop all shakes immediately
+cam.addTrauma(0.5);                       // simple omnidirectional trauma
+cam.shake({ trauma: 0.6, freq: 18, decay: 1.5, maxOffset: 20, maxAngle: 0.03, dirX: 1, dirY: 0 });
 cam.clearShakes();
 
-// Base-shake bridge (v2.1.0): the inherited lite-camera fields are live
-// accessors onto the default omni slot, so a base-style caller's shake works.
-cam.shakeMaxOffset = 20;   // px at full trauma (default 15)
-cam.shakeMaxAngle  = 0.04; // rad at full trauma (default 0.05)
-cam.shakeTrauma    = 1;    // ASSIGNS min(1, v) (addTrauma accumulates); <= 0 stops it
-// A non-finite write throws ERR_CAMERA_SHAKE; writing a max field alone fires nothing.
+import { getPreset, registerPreset } from '@zakkster/lite-camera-pro/shake';
+const p = getPreset('explosion'); if (p) cam.shake(p);   // guard OPTIONAL: cam.shake(null) is a no-op
 ```
 
----
+| preset | trauma | freq | decay | maxOffset | maxAngle | dir | duration (trauma/decay) |
+|:---|---:|---:|---:|---:|---:|:---:|---:|
+| `explosion` | 0.8 | 12 | 0.7 | 25 | 0.06 | omni | 1.14 s |
+| `earthquake` | 0.5 | 6 | 0.3 | 30 | 0.02 | omni | 1.67 s |
+| `recoil` | 0.5 | 20 | 2.5 | 12 | 0.02 | up | 0.20 s |
+| `impact` | 0.7 | 25 | 2.0 | 18 | 0.04 | omni | 0.35 s |
+| `landing` | 0.4 | 18 | 1.5 | 10 | 0.01 | down | 0.27 s |
+| `damage` | 0.35 | 22 | 3.0 | 6 | 0 | omni | 0.12 s |
+| `rumble` | 0.2 | 30 | 0.15 | 3 | 0 | omni | 1.33 s |
+| `heavy_impact` | 1.0 | 10 | 0.5 | 35 | 0.08 | omni | 2.00 s |
 
-### Cinematic Sequences
+A preset's on-screen duration is `trauma / decay`, not a separate field, and
+`intensity` scales BOTH amplitude AND duration (it multiplies trauma) -- to
+shorten a preset without dropping its peak, copy the profile with a higher
+`decay` (the consumer raised `heavy_impact`'s decay 0.5 -> 1.6 to land the same
+peak in 0.63 s).
 
-```mermaid
-sequenceDiagram
-    participant G as Gameplay
-    participant S as Sequence
-    participant C as Camera
+The base-shake bridge (`cam.shakeTrauma` / `cam.shakeMaxOffset` default 15 px /
+`cam.shakeMaxAngle` default 0.05 rad) are live accessors onto the default omni
+slot, so a base-style `lite-camera` caller's shake works unchanged.
 
-    G->>S: camera.playSequence(seq)
-    Note over G: Follow mode paused
+### Sequences
 
-    S->>C: moveTo(boss.x, boss.y, 1200ms)
-    S->>C: zoomTo(1.8, 800ms)
-    S->>C: shake('explosion')
-    S->>C: wait(600ms)
-    S->>C: call(() => boss.startPhase2())
-    S->>C: moveAndZoom(player, 1.0, 1000ms)
-
-    S-->>G: onComplete callback
-    Note over G: Follow mode resumes<br/>smooth blend-back
-```
-
-**The killer feature.** Chain camera moves with a fluent API. The sequence takes full control of position and zoom. When it ends, follow mode resumes with a smooth transition.
+Fluent timeline that takes over position and zoom. Step durations are in
+**milliseconds** (see the [units table](#units-seconds-vs-milliseconds));
+`blendOutTime` is in seconds.
 
 ```js
-// v2.0.0: attach the sequence factory once (or call createCameraSequence(cam,
-// opts) from ./sequence directly).
 import { withSequences } from '@zakkster/lite-camera-pro/sequence';
 withSequences(cam);
 
-const seq = cam.createSequence({ onComplete: () => showUI() })
-    .moveTo(boss.x, boss.y, 1200)                     // pan to boss
-    .zoomTo(1.8, 800)                                  // zoom in
-    .shake('explosion')                                 // screen shake
-    .wait(600)                                          // hold for drama
-    .call(() => boss.startPhase2())                     // trigger game event
-    .moveAndZoom(player.x, player.y, 1.0, 1000);      // return to player
+const seq = cam.createSequence({ onComplete: () => showUI(), blendOutTime: 0.3 })
+    .moveTo(boss.x, boss.y, 1200)
+    .zoomTo(1.8, 800)
+    .shake('explosion')
+    .wait(600)
+    .call(() => boss.startPhase2())
+    .moveAndZoom(player.x, player.y, 1.0, 1000);
 
 cam.playSequence(seq);
-
-// Playback control
-cam.stopSequence();      // cancel + smooth return to follow
-seq.pause();             // freeze
-seq.resume();            // continue
-seq.seek(2000);          // jump to 2s mark
+cam.stopSequence();          // hard handoff: releases the shared ticker, no blend
+seq.pause(); seq.resume(); seq.seek(2000);
 ```
 
-**Sequence presets** for common patterns:
-```js
-import { panTo, dramaticZoom, bossReveal, timedShake } from '@zakkster/lite-camera-pro';
+Sequence presets (return a sequence): `panTo(cam, x, y, ms)`,
+`dramaticZoom(cam, x, y, level, ms)`, `bossReveal(cam, x, y, ms)`,
+`timedShake(cam, presetName, ms)`. `bossReveal` captures its return pose at BUILD
+time -- build it immediately before playing.
 
-// Simple pan
-cam.playSequence(panTo(cam, 800, 400, 1500));
-
-// Boss reveal: zoom in → shake → hold → return
-cam.playSequence(bossReveal(cam, boss.x, boss.y, 3000));
-
-// Dramatic zoom with overshoot easing
-cam.playSequence(dramaticZoom(cam, boss.x, boss.y, 2.5, 1200));
-```
-
----
-
-### Parallax Layers
-
-```mermaid
-graph LR
-    subgraph "Scroll Speed"
-        Sky["☁ Sky<br/>speed: 0.1"]
-        Mountains["⛰ Mountains<br/>speed: 0.3"]
-        Trees["🌲 Trees<br/>speed: 0.7"]
-        Game["🎮 Game Layer<br/>speed: 1.0"]
-        Foreground["🌿 Foreground<br/>speed: 1.3"]
-    end
-
-    Sky ~~~ Mountains ~~~ Trees ~~~ Game ~~~ Foreground
-
-    style Sky fill:#1e3a5f,stroke:#2563eb,color:#93c5fd
-    style Mountains fill:#1e3a5f,stroke:#2563eb,color:#93c5fd
-    style Trees fill:#064e3b,stroke:#059669,color:#6ee7b7
-    style Game fill:#fbbf24,stroke:#92400e,color:#000
-    style Foreground fill:#064e3b,stroke:#059669,color:#6ee7b7
-```
-
-Up to 16 layers. Each scrolls at its own speed relative to the camera.
+### Parallax
 
 ```js
-// v2.0.0: attach the parallax subsystem once, from the ./parallax subpath.
-import { withParallax } from '@zakkster/lite-camera-pro/parallax';
+import { withParallax, WrapMode } from '@zakkster/lite-camera-pro/parallax';
 withParallax(cam);
 
-cam.addParallaxLayer('sky',        0.1);   // barely moves
-cam.addParallaxLayer('mountains',  0.3);   // slow
-cam.addParallaxLayer('trees',      0.7);   // medium
-// game layer is the normal camera (1.0)
-cam.addParallaxLayer('foreground', 1.3);   // moves faster than camera
-
-// Render each layer with its own transform
-ctx.save();
-cam.applyParallax('sky', ctx);
-drawSky(ctx);
-ctx.restore();
-
-ctx.save();
-cam.applyParallax('mountains', ctx);
-drawMountains(ctx);
-ctx.restore();
-
-ctx.save();
-cam.apply(ctx);     // normal game layer
-drawWorld(ctx);
-ctx.restore();
-
-ctx.save();
-cam.applyParallax('foreground', ctx);
-drawForeground(ctx);
-ctx.restore();
-
-// Update or remove layers
-cam.addParallaxLayer('sky', 0.15);   // update speed by re-adding same id
-cam.removeParallaxLayer('foreground');
-
-// Tiling: WrapMode wraps a layer's scroll into tile space (negative-safe
-// Euclidean modulo). A REPEAT mode requires the tile size for its axis, or
-// addParallaxLayer throws ERR_PARALLAX_TILE (fail closed on both add paths).
-import { WrapMode } from '@zakkster/lite-camera-pro/parallax';
+cam.addParallaxLayer('sky', 0.1);                    // barely moves
+cam.addParallaxLayer('mountains', 0.3);
 cam.addParallaxLayer('clouds', 0.2, 0.2, { wrap: WrapMode.REPEAT_X, tileW: 256 });
-// scroll of 3*256 + 7 reads 7; a scroll of -9 reads 247. NONE layers are
-// byte-identical to a non-wrapping build (one `wrap !== 0` compare, ~1.72 ns/layer).
+cam.removeParallaxLayer('sky');
+
+ctx.save(); cam.applyParallax('mountains', ctx); drawMountains(ctx); ctx.restore();
 ```
 
----
+Up to 16 layers, each scrolling at its own speed. A REPEAT wrap mode folds the
+layer scroll into tile space (negative-safe Euclidean modulo) and requires the
+tile size for its axis, or `addParallaxLayer` throws `ERR_PARALLAX_TILE`.
 
-### Smart Bounds
-
-```mermaid
-graph LR
-    subgraph "Boundary Behavior"
-        H["HARD<br/><i>stops at edge</i>"]
-        S["SOFT<br/><i>holds a half-zone back</i>"]
-        E["ELASTIC<br/><i>overshoot + spring back</i>"]
-        N["NONE<br/><i>no enforcement</i>"]
-    end
-
-    style H fill:#ef4444,stroke:#991b1b,color:#fff
-    style S fill:#fbbf24,stroke:#92400e,color:#000
-    style E fill:#a78bfa,stroke:#5b21b6,color:#000
-    style N fill:#374151,stroke:#4b5563,color:#9ca3af
-```
-
-Configure boundary behavior per-edge. Mix and match.
-
-`SOFT` decelerates as the camera nears the edge and holds a half-zone back: the
-granted position is monotone, fixed at the zone entry, and never nearer the edge
-than requested (a quadratic hold-out `g = edge + s*sz*0.5*(1 + u*u)`). Only `HARD`
-reaches the edge itself. With `softZone` 80 at edge 0, a requested 40 is granted
-50, 20 -> 42.5, 79 -> 79.01.
+### Bounds
 
 ```js
 import { BoundsType } from '@zakkster/lite-camera-pro';
-
-// All edges the same
 cam.setBoundsType(BoundsType.SOFT);
-
-// Per-edge configuration
-cam.setBoundsEdges({
-    left:   BoundsType.HARD,
-    right:  BoundsType.SOFT,
-    top:    BoundsType.ELASTIC,
-    bottom: BoundsType.HARD,
-});
-
-// Tuning (guarded setter: softZone >= 0, all finite, else ERR_CAMERA_BOUNDS)
-cam.setSoftZone(80, 30, 8.0);      // softZone, elasticMax, elasticStrength
-// or the raw fields:
-cam._bounds.softZone = 80;         // deceleration zone width (pixels)
-cam._bounds.elasticMax = 30;       // max overshoot (pixels)
-cam._bounds.elasticStrength = 8.0; // spring-back speed
-
-// Dynamic bounds for rooms / arenas
-cam.setBoundsRect(200, 200, 1200, 800);   // constrain to rectangle
-cam.clearBoundsRect();                      // revert to full world
+cam.setBoundsEdges({ left: BoundsType.HARD, right: BoundsType.SOFT, top: BoundsType.ELASTIC, bottom: BoundsType.HARD });
+cam.setSoftZone(80, 30, 8.0);                        // softZone, elasticMax, elasticStrength (guarded)
+cam.setBoundsRect(200, 200, 1200, 800);              // constrain to a rectangle
+cam.clearBoundsRect();
 ```
 
-Bounds edge types fail closed: a garbage type (`setBoundsType(999)`) or a
-non-finite rect throws `ERR_CAMERA_BOUNDS` with nothing mutated.
+`SOFT` decelerates as the camera nears the edge and holds a half-zone back (a
+quadratic hold-out, `g = edge + s*sz*0.5*(1 + u*u)`); only `HARD` reaches the
+edge itself. See [decisions/0005](decisions/0005-soft-bounds.md).
 
----
-
-### Debug HUD
-
-The Pro debug overlay shows everything at a glance. Each panel is individually toggleable.
+### Debug
 
 ```js
-// v2.0.0: attach the debug subsystem once, from the new ./debug subpath. It
-// builds cam.debugConfig (the constructor no longer does) and installs
-// cam.debug/cam.debugHUD.
 import { withDebug } from '@zakkster/lite-camera-pro/debug';
 withDebug(cam);
-
-// Toggle panels on/off
-cam.debugConfig.show.shake    = false;
-cam.debugConfig.show.parallax = false;
-cam.debugConfig.show.bounds   = true;
-
-// Render
-ctx.save();
-cam.apply(ctx);
-cam.debug(ctx);       // world-space: deadzone rect, lookahead vector, world bounds
-ctx.restore();
-cam.debugHUD(ctx);    // screen-space: position, zoom, mode, shake bars, sequence %
+cam.debugConfig.show.shake = false;                  // toggle panels
+ctx.save(); cam.apply(ctx); cam.debug(ctx); ctx.restore();   // world-space overlay
+cam.debugHUD(ctx);                                   // screen-space HUD (after restore)
 ```
 
-**Panels:** position · zoom · follow mode · shake slots (per-slot trauma bars) · sequence progress · parallax layers · bounds type
-
-The debug HUD uses **zero allocations per frame** — it draws directly to canvas with no intermediate objects.
-
----
-
-### Save & Load
+### State (pose-only)
 
 ```js
-// Capture snapshot
-const snapshot = cam.getState();
-// → { posX, posY, targetX, targetY, zoom, mode }
-
-// Restore
-cam.setState(snapshot);
-// Updates position, zoom, mode, and recalculates visible dimensions
-
-// Serialize for save files
-localStorage.setItem('camera', JSON.stringify(cam.getState()));
-cam.setState(JSON.parse(localStorage.getItem('camera')));
+const snap = cam.getState();   // { posX, posY, targetX, targetY, zoom, mode }
+cam.setState(snap);            // restores pose + recomputes visible dims
+cam.destroy();                 // every method then throws ERR_CAMERA_DESTROYED
 ```
 
----
+The snapshot is pose-only -- shake, sequences and zoom animations are not
+serialized.
 
-## Update Loop Integration
+### TypeScript + CameraProSink
 
-```mermaid
-flowchart TB
-    Start["camera.update(dt, px, py, vx, vy)"] --> SeqCheck{Sequence<br/>active?}
-
-    SeqCheck -->|Yes| SeqPath["Read sequence state<br/><i>position + zoom from timeline</i>"]
-    SeqCheck -->|No| MTCheck{Multi-target<br/>active?}
-
-    MTCheck -->|Yes| MTPath["Compute bounding box<br/>Auto-zoom + center"]
-    MTCheck -->|No| SinglePath["Follow strategy<br/><i>SMOOTH / LOCK / PREDICTIVE / CUT / HYBRID</i>"]
-
-    SinglePath --> ZoomAnim["Zoom animation<br/><i>lerp + easing</i>"]
-    ZoomAnim --> BoundsCalc["Update visible dims"]
-
-    SeqPath --> Bounds
-    MTPath --> Bounds
-    BoundsCalc --> Bounds
-
-    Bounds["Apply bounds<br/><i>HARD / SOFT / ELASTIC / NONE</i>"]
-    Bounds --> Lerp["Smooth follow<br/><i>pos += (target - pos) × speed × dt</i>"]
-    Lerp --> Parallax["Update parallax layers"]
-    Parallax --> Shake["Update shake decay"]
-    Shake --> Done["Frame complete"]
-
-    style Start fill:#fbbf24,stroke:#92400e,color:#000
-    style SeqPath fill:#a78bfa,stroke:#5b21b6,color:#000
-    style MTPath fill:#34d399,stroke:#065f46,color:#000
-    style SinglePath fill:#22d3ee,stroke:#155e75,color:#000
-    style Shake fill:#ef4444,stroke:#991b1b,color:#fff
-    style Done fill:#1e1e2e,stroke:#6b7280,color:#d1d5db
-```
-
-One call to `update()` handles everything. The camera automatically dispatches to the right code path based on active state (sequence > multi-target > follow mode).
-
----
-
-## Module Reference
-
-| Module | Lines | Purpose |
-|:---|---:|:---|
-| `CinematicCameraPro.js` | 1127 | Main class + fail-closed detach stubs. Zoom, modes, multi-target, shake, bounds |
-| `CameraSequence.js` | 638 | Fluent timeline builder + sequence presets + `withSequences` (`./sequence`) |
-| `ShakeEngine.js` | 328 | 8-slot noise-based shake pool |
-| `DebugHUD.js` | 319 | Screen/world debug overlays + `withDebug` (`./debug`) |
-| `ParallaxManager.js` | 240 | 16-layer scroll manager + `withParallax` (`./parallax`) |
-| `BoundsSystem.js` | 220 | Per-edge boundary enforcement |
-| `ShakePresets.js` | 192 | 8 frozen profiles + custom registry (`./shake`) |
-| `FollowMode.js` | 179 | 5 pure follow strategies |
-| `index.d.ts` | 166 | Full TypeScript declarations |
-| `MultiTarget.js` | 133 | Bounding box framing + auto-zoom |
-| `index.js` | 32 | Public exports -- the 20-name root surface (D5) |
-
----
-
-## Zero-GC Design
-
-Every hot-path function in lite-camera-pro is allocation-free:
-
-- **Coordinate conversion** uses caller-owned `out` objects (never returns `{ x, y }`)
-- **Visible dimensions** are cached as `cam.visibleW` / `cam.visibleH` (no `getVisibleArea()`)
-- **Shake slots** are pre-allocated in a fixed-size pool (8 slots, reused via steal)
-- **Follow modes** are pure functions that mutate `cam.target[]` directly
-- **Debug HUD** draws directly to canvas — no intermediate line objects
-- **Parallax layers** are pre-allocated (16 slots, mutated in place)
-- **Bounds state** is a single pre-allocated config object
-
-The only allocations happen during **setup** (constructor, `createSequence()`, `trackMultiple()`) — never inside the 60fps update/render loop.
-
----
-
-## TypeScript
-
-Full declarations ship in `src/index.d.ts`:
+Full declarations ship in `src/index.d.ts`. `apply(ctx: CameraProSink)` accepts
+any object with `translate`, `rotate` and `scale`:
 
 ```ts
-// v2.0.0: the class + core enums come from "."; sequences/presets from subpaths.
 import { CinematicCameraPro, FollowMode, BoundsType } from '@zakkster/lite-camera-pro';
 import { withSequences, type CameraSequence } from '@zakkster/lite-camera-pro/sequence';
+
+interface CameraProSink { translate(x: number, y: number): void; rotate(a: number): void; scale(x: number, y: number): void }
+```
+
+`CameraProSink` extends the base `CameraSink` (translate + rotate) with `scale`.
+`CanvasRenderingContext2D` structurally satisfies it -- and so does any
+three-method recorder object (see [Composability](#composability-with-the-ecosystem)).
+
+### Subpath weights
+
+Import only what you use. gz, esm, unminified, gzip -9 (`node test/size.mjs`):
+
+| subpath | gz | contents |
+|:---|---:|:---|
+| `.` | 17.60 KB | class + the 22-name root surface (no parallax/sequence/debug/presets) |
+| `./shake` | 3.07 KB | shake engine + presets/getPreset/registerPreset/listPresets |
+| `./parallax` | 1.63 KB | parallax state + layer functions + WrapMode + withParallax |
+| `./bounds` | 1.55 KB | bounds state + edge setters + applyBounds + BoundsType |
+| `./multi` | 0.89 KB | createMultiTargetState + updateMultiTarget |
+| `./follow` | 0.71 KB | FollowMode + FOLLOW_STRATEGIES |
+| `./sequence` | 7.40 KB | sequence builder + presets + withSequences (drags lite-timeline + lite-ease by design) |
+| `./debug` | 2.10 KB | debug config + draws + withDebug |
+
+### Constants and defaults
+
+Verified against `src/`. Capacities are documented as capacities -- they are NOT
+exported names; the root surface stays exactly 22.
+
+| name | value | notes |
+|:---|:---|:---|
+| `VERSION` | `"2.1.1"` | exported |
+| shake slots | 8 | pool capacity (module constant `MAX_SHAKE_SLOTS`, not exported) |
+| parallax layers | 16 | pool capacity (module constant `MAX_LAYERS`, not exported) |
+| `seed` | 42 | constructor default; `seedOffset = seed * 7919` |
+| `maxDt` | 0.1 s | `update()` clamp, plain tunable |
+| `minZoom` | 0.25 | camera zoom clamp default |
+| `maxZoom` | 4.0 | camera zoom clamp default |
+| `predictTime` | 0.3 s | PREDICTIVE extrapolation window |
+| `shakeMaxOffset` | 15 px | default omni slot, at full trauma |
+| `shakeMaxAngle` | 0.05 rad | default omni slot, at full trauma |
+| `blendOutTime` | 0.3 s | sequence completion blend default |
+| `softZone` | 80 px | bounds default |
+| `elasticMax` | 30 px | bounds default |
+| `elasticStrength` | 8.0 | bounds default |
+
+### Error codes
+
+Every door throws a house-style `Error` with a `.code`. All 15:
+
+| code | raised by |
+|:---|:---|
+| `ERR_CAMERA_MODE` | `setMode`: mode must be an integer FollowMode in [0, 4] |
+| `ERR_CAMERA_STATE` | `setState`: snapshot validated in full before any write |
+| `ERR_CAMERA_ZOOM` | `setZoom` / `zoomAt`: level/anchor/duration finite, duration >= 0 |
+| `ERR_CAMERA_TARGETS` | `trackMultiple` / `setTargetCount`: array of finite-x/y objects |
+| `ERR_SHAKE_PRESET` | `registerPreset`: non-empty string name + object profile |
+| `ERR_SHAKE_PROFILE` | `shake` / `addShake`: null/undefined is a no-op; any other non-object is an error |
+| `ERR_CAMERA_SHAKE` | `shakeTrauma` / `shakeMaxOffset` / `shakeMaxAngle` setters: value must be finite |
+| `ERR_CAMERA_BOUNDS` | `setBoundsType` / `setBoundsEdges` / `setBoundsRect` / `setSoftZone` |
+| `ERR_PARALLAX_TILE` | `addParallaxLayer`: a REPEAT wrap needs a finite tile size > 0 |
+| `ERR_SEQUENCE_OPTIONS` | `createSequence({ blendOutTime })`: finite >= 0 seconds |
+| `ERR_PARALLAX_NOT_ATTACHED` | parallax method before `withParallax(cam)` |
+| `ERR_SEQUENCE_NOT_ATTACHED` | `createSequence` before `withSequences(cam)` |
+| `ERR_DEBUG_NOT_ATTACHED` | `debug` / `debugHUD` before `withDebug(cam)` |
+| `ERR_ALREADY_ATTACHED` | a second `withX` of the same subsystem on one camera |
+| `ERR_CAMERA_DESTROYED` | every public method after `destroy()` (beats not-attached) |
+
+## Composability with the ecosystem
+
+An end-to-end pipeline: attach the subsystems, drive a boss reveal, resume
+follow. Everything below is one camera.
+
+```js
+import { CinematicCameraPro, FollowMode, BoundsType } from '@zakkster/lite-camera-pro';
+import { withSequences } from '@zakkster/lite-camera-pro/sequence';
+import { withParallax } from '@zakkster/lite-camera-pro/parallax';
 import { getPreset } from '@zakkster/lite-camera-pro/shake';
 
 const cam = new CinematicCameraPro(800, 600, 3200, 2400);
-cam.setMode(FollowMode.PREDICTIVE);
-cam.setBoundsType(BoundsType.ELASTIC);
-withSequences(cam);
+withParallax(cam); withSequences(cam);
+cam.setMode(FollowMode.SMOOTH);
+cam.setBoundsType(BoundsType.SOFT);
+cam.addParallaxLayer('sky', 0.2);
 
-const seq: CameraSequence = cam.createSequence()
-    .moveTo(400, 300, 1200)
-    .zoomTo(2.0, 800)
-    .shake('explosion');
+const reveal = cam.createSequence({ onComplete: () => resumeGameplay() })
+    .moveTo(boss.x, boss.y, 1200)
+    .zoomTo(1.8, 800)
+    .shake('explosion')
+    .wait(600)
+    .moveAndZoom(player.x, player.y, 1.0, 1000);
+cam.playSequence(reveal);
 ```
 
----
+**Driving a non-canvas sink.** `apply(ctx)` touches exactly three methods --
+`ctx.translate(x, y)`, `ctx.rotate(a)` and `ctx.scale(x, y)` -- nothing else. A
+`CanvasRenderingContext2D` satisfies that, but so does a nine-line recorder that
+writes a CSS `transform` onto a DOM node. The camera can drive a modal, an HTML
+overlay or any transformable surface; Canvas2D is the default, not a requirement.
 
-## Testing
-
-```bash
-npm test          # node:test -- 348 tests
-npm run test:gc   # same, under --expose-gc
-npm run torture   # node --expose-gc test/torture.mjs -- prints "ok"
+```js
+// A CameraProSink that renders to a DOM element's CSS transform.
+function cssTransformSink(el) {
+    let tx = 0, ty = 0, rot = 0, sx = 1, sy = 1;
+    return {
+        translate(x, y) { tx = x; ty = y; },
+        rotate(a) { rot = a; },
+        scale(x, y) { sx = x; sy = y;
+            el.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}rad) scale(${sx}, ${sy})`;
+        },
+    };
+}
+const sink = cssTransformSink(document.getElementById('modal'));
+cam.apply(sink);   // the win-modal shake, no canvas anywhere
 ```
 
-The suite covers the class facade (initialization, coordinate conversion, all 5
-follow modes, multi-target framing, zoom animation, the shake engine, bounds,
-save/load, destruction), the attached subsystems (parallax, sequences, debug),
-the directly-exported functional API, and the v2.0.0 detach gates: a static
-import-graph walk (`test/import-graph.test.js`), literal bundle probes
-(`test/bundle-literals.test.js`), the class-only 3PPLE replay
-(`test/consumer-tripple.test.js`), and the `.`/subpath size ceilings
-(`test/size.mjs`).
+## Zero-GC design notes
 
----
+<details>
+<summary><b>Where the allocations are, and where they are not</b></summary>
 
-## Migration from lite-camera
+| operation | allocates | when |
+|:---|:---:|:---|
+| `update()` (any dispatch path) | no | -- |
+| `apply()` / `applyParallax()` | no | -- |
+| `screenToWorld` / `worldToScreen` | no | caller-owned `out` object |
+| `addTrauma` / `shake` / `computeShake` | no | pre-allocated 8-slot pool, reused via steal |
+| follow strategies | no | pure functions mutating `cam.target[]` in place |
+| bounds / parallax step | no | single pre-allocated config; 16 layer slots in place |
+| debug HUD draw | no | draws directly to canvas, no intermediate objects |
+| `getPreset(name)` | warm | one `toLowerCase()` on the lookup |
+| `play()` sequence rebuild | warm | rebuilds the timeline from a snapshot |
+| `getState()` | warm | returns a fresh pose snapshot object |
+| `debugHUD` string formatting | warm | HUD label strings |
+| constructor / `withX` / `createSequence` / `trackMultiple` | once | setup only |
 
-lite-camera-pro extends `CinematicCamera`. Drop-in replacement:
+Hot rows are all zero. The only allocations happen at setup or on warm,
+non-per-frame calls -- never inside the 60fps update/render loop.
+
+Gated: `node --expose-gc test/torture.mjs` drives a steady-state camera through
+200k `update()` + `apply()` + `applyParallax()` frames with an always-active
+shake and gates the window at `maxMajor: 0` / `maxPauseMs: 4` (measured: gc
+major=0, maxMs 0.11). It also pins the 8-slot shake pool and the 16-layer
+parallax array by identity -- a per-frame `new` would either trip a major GC or
+swap one of those references. Prints `ok`.
+
+</details>
+
+## Design decisions worth knowing
+
+One record per decision, all in [decisions/](decisions/) (repo-only, never
+shipped in the tarball):
+
+- **[0001 -- Multi-file layout and first-party deps](decisions/0001-layout-and-deps.md)**
+  (accepted, v1.1.0). Documents the two departures from single-file law: the
+  `src/` module layout behind an `index.js` barrel, and the five first-party
+  `@zakkster` runtime deps, with the evidence that keeps the floors honest.
+- **[0002 -- Delta-time policy](decisions/0002-dt-policy.md)** (accepted, v1.2.0).
+  Pins how `update()` and `updateShake()` treat `dt`: a NaN dt used to poison the
+  shake engine forever (CP-3) and a dt spike diverged the position lerp (CP-4);
+  the policy closes both with hot bodies paying zero.
+- **[0003 -- Sequence blend-out and ticker release](decisions/0003-blend-out.md)**
+  (accepted, v1.3.0). `blendOutTime` was decorative (CP-10b), `stop()` leaked the
+  shared-ticker refcount (CP-5), and `at: 0` was silently dropped (CP-11); all
+  three fixed, with completion now blending position back to follow.
+- **[0004 -- The detach](decisions/0004-detach.md)** (accepted, v2.0.0). Severs
+  the four subsystems (presets, sequences, parallax, debug) and `lite-timeline`
+  from the reachable class graph so a class-only consumer stops shipping 44 KB of
+  subsystem source it never calls; they return per instance via `withX`.
+- **[0005 -- SOFT bounds hold-out](decisions/0005-soft-bounds.md)** (accepted,
+  v2.1.0). The old SOFT map accelerated the camera INTO the edge it promised to
+  cushion (CP-6); replaced with a quadratic half-zone hold-out that is monotone
+  and never nearer the edge than requested.
+- **[0006 -- Parallax wrap](decisions/0006-parallax-wrap.md)** (accepted,
+  v2.1.0). `WrapMode` was stored and never read (CP-10a); a REPEAT mode now folds
+  scroll into tile space, failing closed at the `addParallaxLayer` door when the
+  tile size is missing.
+- **[0007 -- The base shake bridge](decisions/0007-base-shake-bridge.md)**
+  (accepted, v2.1.0). The base's public shake fields were inert on Pro (CP-9),
+  breaking the drop-in-superset promise; prototype accessors now bridge
+  `shakeTrauma` / `shakeMaxOffset` / `shakeMaxAngle` onto the default omni slot.
+- **[0008 -- Callback lifecycle](decisions/0008-callback-lifecycle.md)**
+  (accepted, v2.1.0). Re-entrant `destroy()` from a user callback crashed on
+  nulled arrays (CP-20); natural completion now auto-releases the ticker (CP-24),
+  with the shake door (CP-25) and bounds door (CP-26) alongside.
+
+## Migration
+
+### From lite-camera
+
+`CinematicCameraPro` extends `CinematicCamera`. Drop-in replacement:
 
 ```diff
 - import { CinematicCamera } from '@zakkster/lite-camera';
 + import { CinematicCameraPro as CinematicCamera } from '@zakkster/lite-camera-pro';
 
   const cam = new CinematicCamera(800, 600, 3200, 2400);
-  // Everything from lite-camera still works: addTrauma(), update(), apply().
-  // (v2.0.0: debug() now needs withDebug(cam) -- see the 1.x -> 2.0.0 table below.)
+  // addTrauma(), update(), apply() all still work. Add Pro features incrementally.
 ```
 
-Then add Pro features incrementally. Nothing breaks.
-
----
-
-## Migration from 1.x to 2.0.0
+### From 1.x to 2.0.0
 
 v2.0.0 detached four subsystems from the class so a class-only consumer stops
-bundling them (and `lite-timeline`). The core -- follow, zoom, shake, multi-target,
-bounds, coordinate conversion, save/load -- is unchanged. Add the opt-ins you use:
+bundling them (and `lite-timeline`). The core is unchanged. Add the opt-ins you
+use:
 
 | 1.x | 2.0.0 |
-| --- | --- |
-| `cam.shakePreset(name, i)` | `import { getPreset } from '@zakkster/lite-camera-pro/shake';`<br>`const p = getPreset(name); if (p) cam.shake(p, i);` |
-| `cam.createSequence(opts)` | `import { withSequences } from '@zakkster/lite-camera-pro/sequence';`<br>`withSequences(cam); cam.createSequence(opts);` |
-| `cam.addParallaxLayer(...)` / `applyParallax` | `import { withParallax } from '@zakkster/lite-camera-pro/parallax';`<br>`withParallax(cam);` then call sites unchanged |
-| `cam.debug(ctx)` / `cam.debugHUD(ctx)` | `import { withDebug } from '@zakkster/lite-camera-pro/debug';`<br>`withDebug(cam);` then call sites unchanged |
-| `import { getPreset, createCameraSequence, createParallaxState, drawDebugHUD } from '@zakkster/lite-camera-pro';` | import those names from `./shake`, `./sequence`, `./parallax`, `./debug` |
+|:---|:---|
+| `cam.shakePreset(name, i)` | `import { getPreset } from '@zakkster/lite-camera-pro/shake';` then `const p = getPreset(name); if (p) cam.shake(p, i);` |
+| `cam.createSequence(opts)` | `import { withSequences } from '@zakkster/lite-camera-pro/sequence';` then `withSequences(cam);` |
+| `cam.addParallaxLayer(...)` / `applyParallax` | `import { withParallax } from '@zakkster/lite-camera-pro/parallax';` then `withParallax(cam);` -- call sites unchanged |
+| `cam.debug(ctx)` / `cam.debugHUD(ctx)` | `import { withDebug } from '@zakkster/lite-camera-pro/debug';` then `withDebug(cam);` -- call sites unchanged |
+| root import of `getPreset` / `createCameraSequence` / `createParallaxState` / `drawDebugHUD` | import those from `./shake` / `./sequence` / `./parallax` / `./debug` |
 
-The `getPreset` guard is MANDATORY: an unknown name returns `null` and
-`cam.shake(null)` throws, so `if (p)` preserves the old no-op-on-unknown-name.
-An unattached subsystem method throws a named error (`ERR_PARALLAX_NOT_ATTACHED`,
-`ERR_SEQUENCE_NOT_ATTACHED`, `ERR_DEBUG_NOT_ATTACHED`) whose message names the
-exact import + call to fix it; a second `withX` throws `ERR_ALREADY_ATTACHED`.
+The `getPreset` guard is now **OPTIONAL**, not mandatory: an unknown name returns
+`null`, and since 2.1.0 `cam.shake(null)` is a documented no-op (any other
+non-object profile throws `ERR_SHAKE_PROFILE`). The old `if (p)` idiom still works
+and is still recommended, but it is no longer required to avoid a throw. An
+unattached subsystem method throws a named error whose message names the exact
+import + call to fix it; a second `withX` throws `ERR_ALREADY_ATTACHED`.
 
----
+## Testing
+
+```bash
+npm test            # node:test suite
+npm run test:gc     # same, under --expose-gc
+npm run torture     # node --expose-gc test/torture.mjs -- prints "ok"
+npm run verify      # test:gc + torture + size gate
+npm run typecheck   # tsc over test/types-smoke
+npm run bundle-check # esbuild bundle of ./src/index.js
+npm run prepublishOnly # verify + typecheck + bundle-check
+```
+
+The suite is **385 tests**. It covers the class facade (initialization,
+coordinate conversion, all 5 follow modes, multi-target framing, zoom, shake,
+bounds, save/load, destruction), the attached subsystems (parallax, sequences,
+debug), the directly-exported functional API, and the v2.0.0 detach gates: a
+static import-graph walk (`test/import-graph.test.js`), literal bundle probes
+(`test/bundle-literals.test.js`), the class-only replay
+(`test/consumer-tripple.test.js`) and the `.`/subpath size ceilings
+(`test/size.mjs`). Two permanent metadata gates live in
+`test/metadata.test.js`: **Gate A** (ASCII on the shipped set + repo docs) and
+**Gate B** (docs-drift: every export is documented in `llms.txt`, every relative
+link resolves, and the TOC matches the headings both ways). The zero-GC proof is
+`test/torture.mjs` (see [Zero-GC design notes](#zero-gc-design-notes)).
+
+## What this is not
+
+`lite-camera-pro` is a cinematic layer, not a kitchen sink. It deliberately does
+NOT own:
+
+| not | that lives in |
+|:---|:---|
+| base camera maths / the `CameraSink` contract | `@zakkster/lite-camera` |
+| a ticker or timeline engine | `@zakkster/lite-timeline` (reached via `./sequence`) |
+| the simplex generator / permutation table | `@zakkster/lite-noise` (global singleton) |
+| a reactive/signal-driven transform | `lite-camera-max` |
+| easing curves / interpolation | `@zakkster/lite-ease`, `@zakkster/lite-lerp` |
+| WebGL / 3D projection | out of scope (2D orthographic only) |
+| a renderer / draw calls | you draw; the camera only transforms the sink |
+
+## Ecosystem
+
+Runtime dependencies, all first-party `@zakkster`:
+
+- **[lite-camera](https://www.npmjs.com/package/@zakkster/lite-camera)** -- the
+  base `CinematicCamera` Pro extends.
+- **lite-ease** / **lite-lerp** -- easing curves and interpolation.
+- **lite-noise** -- the simplex generator behind the shake.
+- **lite-timeline** -- the sequence ticker, reached only via `./sequence`.
+
+Related: **lite-camera** (the base) and **lite-camera-max** (the reactive,
+signal-driven camera). All part of the **LiteLibrariesSuite** -- ~170 zero-GC,
+single-file ESM micro-libraries under the `@zakkster/*` scope.
+
+See also [CHANGELOG.md](CHANGELOG.md) and [llms.txt](llms.txt).
 
 ## License
 
-MIT © Zahary Shinikchiev. See [LICENSE](LICENSE).
+MIT (c) Zahary Shinikchiev <shinikchiev@yahoo.com>. See [LICENSE](LICENSE).

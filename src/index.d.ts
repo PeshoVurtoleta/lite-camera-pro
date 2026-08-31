@@ -18,11 +18,22 @@ export * from './MultiTarget.js';
 export * from './FollowMode.js';
 
 // -- Types needed locally by the class declaration --
+import type { CameraSink } from '@zakkster/lite-camera';
 import type { ShakeProfile } from './Shake.js';
 import type { Vec2, MultiTargetOptions } from './MultiTarget.js';
 import type { BoundsEdgesConfig } from './BoundsSystem.js';
 import type { CameraSequence, CameraSequenceOptions } from './CameraSequence.js';
 import type { DebugHUDConfig } from './DebugHUD.js';
+
+/**
+ * The render sink apply() drives. Extends the base CameraSink (translate +
+ * rotate) with the scale() call Pro adds for zoom -- apply(ctx) touches exactly
+ * ctx.translate(x, y), ctx.rotate(a), ctx.scale(x, y). A CanvasRenderingContext2D
+ * structurally satisfies it; any three-method recorder object does too.
+ */
+export interface CameraProSink extends CameraSink {
+    scale(x: number, y: number): void;
+}
 
 /**
  * Error codes a class-only camera can throw for the detached subsystems
@@ -167,7 +178,7 @@ export declare class CinematicCameraPro {
      * passes untouched).
      */
     update(dt: number, px: number, py: number, pvx?: number, pvy?: number): void;
-    apply(ctx: CanvasRenderingContext2D): void;
+    apply(ctx: CameraProSink): void;
 
     /**
      * Zoom-aware resize (CP-7). Validates the four dims (base), sets them, then

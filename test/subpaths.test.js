@@ -88,7 +88,7 @@ test("'.' entry export-name set is exactly the 2.1.0 root surface (+ VERSION val
     ];
     assert.equal(ROOT_2_1_0.length, 22);
     assert.deepEqual(Object.keys(mainEntry).sort(), [...ROOT_2_1_0].sort());
-    assert.equal(MAIN_VERSION, '2.1.0');
+    assert.equal(MAIN_VERSION, '2.1.1'); // flipped by PRO5 (v2.1.1, docs/types/hygiene -- surface unchanged)
 });
 
 // -----------------------------------------------------------------------------

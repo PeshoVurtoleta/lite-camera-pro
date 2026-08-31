@@ -1094,7 +1094,7 @@
                     </div>
                     <select id="ctrl-bounds">
                         <option value="0">HARD &#x2014; instant clamp</option>
-                        <option value="1">SOFT &#x2014; smoothstep deceleration</option>
+                        <option value="1">SOFT &#x2014; quadratic hold-out (decelerates)</option>
                         <option value="2">ELASTIC &#x2014; overshoot &amp; spring</option>
                         <option value="3">NONE &#x2014; no enforcement</option>
                     </select>
@@ -1138,6 +1138,8 @@
                 <label class="checkbox"><input type="checkbox" id="cb-fog" checked><span class="box"></span>Fog (0.75&#xD7;)</label>
                 <label class="checkbox"><input type="checkbox" id="cb-fg" checked><span class="box"></span>Foreground
                     dust (1.30&#xD7;)</label>
+                <div class="divider"></div>
+                <div class="note">Marker fence (0.35&#xD7;) tiles via WrapMode.REPEAT_X at tileW 180 &#x2014; the amber beacons repeat seamlessly as you scroll (2.1.0 wrap).</div>
             </div>
         </section>
 
@@ -1168,6 +1170,38 @@
                 </label>
                 <button class="btn" id="btn-dt-spike">Tab stall (dt=1.5s)</button>
                 <div class="note" id="dt-spike-out">A single update(1.5s) is clamped to maxDt so a backgrounded tab never teleports the camera.</div>
+            </div>
+        </section>
+
+        <!-- ----- ZERO-GC EVIDENCE ----- -->
+        <section class="panel accent-green" data-panel="zerogc">
+            <div class="panel-header">
+                <span class="panel-title">Zero-GC Evidence</span>
+                <span class="panel-chevron">&#x25BC;</span>
+            </div>
+            <div class="panel-body">
+                <div class="note" id="zgc-mode-note">Sampling the live heap once per frame into a 256-slot ring.</div>
+                <label class="field">
+                    <div class="field-row">
+                        <span id="zgc-min-label">Heap min</span>
+                        <span class="field-value" id="zgc-min">&#x2014;</span>
+                    </div>
+                </label>
+                <label class="field">
+                    <div class="field-row">
+                        <span id="zgc-max-label">Heap max</span>
+                        <span class="field-value" id="zgc-max">&#x2014;</span>
+                    </div>
+                </label>
+                <label class="field">
+                    <div class="field-row">
+                        <span id="zgc-delta-label">Delta/frame</span>
+                        <span class="field-value" id="zgc-delta">&#x2014;</span>
+                    </div>
+                </label>
+                <div class="divider"></div>
+                <button class="btn toggle" id="btn-zgc-storm">Alloc storm: OFF</button>
+                <div class="note">Steady state holds the heap flat &#x2014; the library allocates nothing per frame. Arm the alloc storm (the control) and the series climbs and sawtooths, proving the meter is live.</div>
             </div>
         </section>
 
@@ -1210,7 +1244,7 @@
     // ./sequence, ./debug, ./shake subpaths). No importmap entry is needed --
     // these are relative source imports, same package, same files.
     import { CinematicCameraPro, FollowMode, BoundsType, VERSION } from '../src/index.js';
-    import { withParallax } from '../src/ParallaxManager.js';
+    import { withParallax, WrapMode } from '../src/ParallaxManager.js';
     import { withSequences } from '../src/CameraSequence.js';
     import { drawDebugHUD, drawDebugWorld } from '../src/DebugHUD.js';
     import { getPreset, listPresets } from '../src/ShakePresets.js';
@@ -1233,6 +1267,8 @@
     // --- World setup --------------------------------------------------------
     const VIEW_W = 900, VIEW_H = 600;
     const WORLD_W = 3600, WORLD_H = 2400;
+    // Tile width (world px) for the REPEAT_X wrap layer (2.1.0 wrap demo).
+    const MARKER_TILE_W = 180;
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
 
@@ -1251,6 +1287,10 @@
     camera.addParallaxLayer('hills', 0.50);
     camera.addParallaxLayer('fog', 0.75);
     camera.addParallaxLayer('foreground', 1.30);
+    // 2.1.0 wrap: a REPEAT_X tiled marker fence. speedY 0 pins it to a fixed
+    // screen band so the horizontal tiling reads cleanly; updateParallax folds
+    // scrollX into [0, tileW) so the beacons repeat seamlessly as you scroll.
+    camera.addParallaxLayer('markers', 0.35, 0, { wrap: WrapMode.REPEAT_X, tileW: MARKER_TILE_W });
 
     // Center the camera on the player initially
     const playerStart = {x: WORLD_W * 0.5, y: WORLD_H * 0.65};
@@ -1494,6 +1534,27 @@
         ctx.fillRect(-200, WORLD_H * 0.72, WORLD_W * 1.4, WORLD_H * 0.3);
     }
 
+    // REPEAT_X wrap layer (2.1.0). One motif per tile, stepped across the visible
+    // span at MARKER_TILE_W spacing. Loop bounds come from cached dims; the body
+    // allocates nothing. The layer's wrapped scrollX makes the fence loop.
+    function drawMarkersLayer(ctx) {
+        const tileW = MARKER_TILE_W;
+        const topY = 66;
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.55)';
+        for (let x = -tileW; x <= VIEW_W + tileW; x += tileW) {
+            // vertical beacon
+            ctx.fillRect(x - 1, topY, 2, 26);
+            // diamond cap -- the distinct repeating motif
+            ctx.beginPath();
+            ctx.moveTo(x, topY - 9);
+            ctx.lineTo(x + 6, topY);
+            ctx.lineTo(x, topY + 9);
+            ctx.lineTo(x - 6, topY);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+
     function drawForegroundLayer(ctx) {
         for (let i = 0; i < fgDust.length; i++) {
             const d = fgDust[i];
@@ -1690,6 +1751,39 @@
     const $btnDtSpike = document.getElementById('btn-dt-spike');
     const $dtMaxdt = document.getElementById('dt-maxdt');
     const $dtSpikeOut = document.getElementById('dt-spike-out');
+    const $zgcModeNote = document.getElementById('zgc-mode-note');
+    const $zgcMinLabel = document.getElementById('zgc-min-label');
+    const $zgcMaxLabel = document.getElementById('zgc-max-label');
+    const $zgcDeltaLabel = document.getElementById('zgc-delta-label');
+    const $zgcMin = document.getElementById('zgc-min');
+    const $zgcMax = document.getElementById('zgc-max');
+    const $zgcDelta = document.getElementById('zgc-delta');
+    const $btnZgcStorm = document.getElementById('btn-zgc-storm');
+
+    // --- Zero-GC evidence: pre-allocated ring buffer (D-demo) --------------
+    // 256 Float64 slots, power-of-2 so the write index masks with & 255. One
+    // sample write + integer index advance per frame; readout is throttled.
+    // performance.memory is Chrome-only AND quantized -- gate on existence and
+    // fall back to a per-frame frame-time series with an honest note.
+    const ZGC_MASK = 255;
+    const zgcRing = new Float64Array(256);
+    const zgcSort = new Float64Array(256); // in-place sort scratch for p99
+    let zgcHead = 0, zgcFilled = 0;
+    let zgcLastNow = performance.now();
+    let zgcStorm = false;
+    let zgcSink = null; // storm branch target -- keeps the alloc observable
+    const HEAP_OK = !!(performance.memory && typeof performance.memory.usedJSHeapSize === 'number');
+    if (HEAP_OK) {
+        $zgcModeNote.textContent = 'Sampling usedJSHeapSize once per frame into a 256-slot ring.';
+        $zgcMinLabel.textContent = 'Heap min';
+        $zgcMaxLabel.textContent = 'Heap max';
+        $zgcDeltaLabel.textContent = 'Delta/frame';
+    } else {
+        $zgcModeNote.textContent = 'This browser exposes no heap counter -- sampling per-frame frame time instead (honest fallback).';
+        $zgcMinLabel.textContent = 'Frame min';
+        $zgcMaxLabel.textContent = 'Frame max';
+        $zgcDeltaLabel.textContent = 'Frame p99';
+    }
 
     // Stamp the version once, from the library's own VERSION const (D-d).
     $brandVersion.textContent = 'v' + VERSION;
@@ -1821,6 +1915,7 @@
             ctx.save(); camera.applyParallax('mountains', ctx); drawMountainsLayer(ctx); ctx.restore();
             ctx.save(); camera.applyParallax('hills', ctx); drawHillsLayer(ctx); ctx.restore();
             ctx.save(); camera.applyParallax('fog', ctx); drawFogLayer(ctx); ctx.restore();
+            ctx.save(); camera.applyParallax('markers', ctx); drawMarkersLayer(ctx); ctx.restore();
         }
 
         ctx.save();
@@ -1865,6 +1960,19 @@
         // string work lives inside updateHeaderStats, never per frame.
         if ((frameCount & 7) === 0) updateHeaderStats();
 
+        // Zero-GC evidence sample (D-demo): one ring write + masked index. The
+        // sample is heap bytes when the counter exists, else this frame's ms.
+        // Alloc-free -- except the storm branch, the control that proves the
+        // meter is live by deliberately allocating an array + string per frame.
+        const zgcSample = HEAP_OK ? performance.memory.usedJSHeapSize : (now - zgcLastNow);
+        zgcLastNow = now;
+        zgcRing[zgcHead] = zgcSample;
+        zgcHead = (zgcHead + 1) & ZGC_MASK;
+        if (zgcFilled < 256) zgcFilled++;
+        if (zgcStorm) zgcSink = new Array(64).fill('storm ' + now);
+        // Readout throttled ~8Hz via the same frame-counter mask idiom.
+        if ((frameCount & 7) === 0) updateZgcReadout();
+
         requestAnimationFrame(loop);
     }
 
@@ -1882,6 +1990,36 @@
         $statParallax.textContent = camera._parallax.activeCount + '/16';
         $statMode.textContent = FollowMode[camera.mode] || 'SMOOTH';
         $statZoom.textContent = camera.zoom.toFixed(3) + '\u00D7';
+    }
+
+    // --- Zero-GC evidence readout (warm path, ~8Hz) ------------------------
+    // Reads the ring (min/max over the filled window + per-frame delta or a
+    // frame-time p99). toFixed here is fine off the hot path. The p99 sort runs
+    // in-place on a pre-allocated scratch buffer, so even this stays alloc-free.
+    function updateZgcReadout() {
+        const n = zgcFilled;
+        if (n === 0) return;
+        let mn = Infinity, mx = -Infinity;
+        for (let i = 0; i < n; i++) {
+            const v = zgcRing[i];
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+        }
+        if (HEAP_OK) {
+            const newest = (zgcHead - 1) & ZGC_MASK;
+            const prev = (zgcHead - 2) & ZGC_MASK;
+            const delta = zgcRing[newest] - zgcRing[prev];
+            $zgcMin.textContent = (mn / 1048576).toFixed(2) + ' MB';
+            $zgcMax.textContent = (mx / 1048576).toFixed(2) + ' MB';
+            $zgcDelta.textContent = (delta / 1024).toFixed(1) + ' KB';
+        } else {
+            for (let i = 0; i < n; i++) zgcSort[i] = zgcRing[i];
+            zgcSort.subarray(0, n).sort();
+            const p99 = zgcSort[Math.min(n - 1, Math.floor(n * 0.99))];
+            $zgcMin.textContent = mn.toFixed(2) + ' ms';
+            $zgcMax.textContent = mx.toFixed(2) + ' ms';
+            $zgcDelta.textContent = p99.toFixed(2) + ' ms';
+        }
     }
 
     // --- UI state & Interactions -------------------------------------------
@@ -2345,6 +2483,14 @@
     document.getElementById('cb-hud-shake').addEventListener('change', e => uiState.hudConfig.show.shake = e.target.checked);
     document.getElementById('cb-hud-seq').addEventListener('change', e => uiState.hudConfig.show.sequence = e.target.checked);
     document.getElementById('cb-hud-pllx').addEventListener('change', e => uiState.hudConfig.show.parallax = e.target.checked);
+
+    // Alloc-storm control (D-demo): arms the deliberate per-frame allocation so
+    // the heap series visibly climbs -- the proof the zero-GC meter is live.
+    $btnZgcStorm.addEventListener('click', () => {
+        zgcStorm = !zgcStorm;
+        $btnZgcStorm.textContent = zgcStorm ? 'Alloc storm: ON' : 'Alloc storm: OFF';
+        $btnZgcStorm.classList.toggle('on', zgcStorm);
+    });
 
     // Director
     $btnDirector.addEventListener('click', runDirector);

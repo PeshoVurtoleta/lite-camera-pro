@@ -6,6 +6,115 @@ Versioning. Version lives in three places at once -- `package.json`, the
 `VERSION` const in `src/index.js`, and the `Version:` header in `llms.txt` --
 bumped together or not at all.
 
+## [2.1.1] -- 2026-08-31
+
+The evaluation kit: docs, demo, types, hygiene. No runtime behavior change --
+the only src/*.js edits are comment bytes, proven below.
+
+### Added
+- `CameraProSink` in `src/index.d.ts`: `extends CameraSink { scale(x, y) }`
+  (the base's 2-method sink + scale). `apply(ctx)` retyped to accept it --
+  `apply` calls exactly `translate`/`rotate`/`scale`, so a 9-line recorder
+  object can drive a CSS transform with no canvas (BRIEF note B).
+  `CanvasRenderingContext2D` structurally satisfies the type; nothing breaks.
+  `test/types-smoke/smoke.ts` pins both directions (recorder compiles,
+  2-method sink rejected -- verified once, kept as a commented negative case).
+- llms.txt: noise-determinism note (the simplex perm table is global to
+  lite-noise -- `seedNoise()` anywhere in the app re-shapes every camera's
+  shake; the constructor `seed` / `seedOffset*7919` decorrelates cameras but
+  does not isolate them from a global reseed); preset-duration note beside
+  the preset list (duration = trauma/decay; `intensity` scales amplitude AND
+  duration -- shorten a preset by copying it with a higher `decay`, BRIEF
+  note A); `apply()` sink contract line.
+- metadata.test.js Gate A: permanent ASCII gate over src/*.js, src/index.d.ts,
+  README.md, CHANGELOG.md, llms.txt, LICENSE, decisions/*.md and
+  test/**/*.{js,mjs,ts} -- zero codepoints above U+007F except U+00D7 and
+  U+00B5, with in-file positive/exemption/coverage controls and an
+  exact-count exemption ledger (empty). Observed RED before the sweep
+  (offender records captured), green after.
+- metadata.test.js Gate B (docs-drift guard): every export of `.` and each
+  subpath module is documented in llms.txt as a whole word (exists ->
+  documented; root exactly 22, >= 60 name-checks, `__notAnExport__` negative
+  probe); every relative `](target)` link in README.md + llms.txt resolves
+  on disk (>= 8); the README TOC slugs and `##` headings agree both ways
+  (>= 12 entries). Four tests, each with an in-test control.
+- README: a `Units: seconds vs milliseconds` table (anchored, linked from
+  both the class and the sequences sections), the BRIEF note A sentence
+  directly beneath the preset table (duration = trauma/decay; `intensity`
+  scales amplitude AND duration), and the BRIEF note B recorder recipe under
+  Composability (`apply(ctx)` touches exactly translate/rotate/scale, so a
+  nine-line sink drives a CSS transform with no canvas).
+- demo/CameraProModule.html: a `WrapMode.REPEAT_X` marker-fence parallax layer
+  (`markers`, speedX 0.35 / speedY 0, tileW 180) added once at init beside the
+  five existing layers -- an evenly spaced amber beacon motif drawn in a
+  cached-bounds loop so 2.1.0's wrap is visible (the fence repeats seamlessly
+  as you scroll); the panel counter reads N/16 and a legend names it.
+- demo/CameraProModule.html: a Zero-GC Evidence panel (after Debug Overlay).
+  A 256-slot `Float64Array` ring is written once per frame from the existing
+  rAF loop -- `performance.memory.usedJSHeapSize` when the counter exists, else
+  the frame's own ms -- with a power-of-2 masked index (`& 255`); a ~8 Hz
+  frame-counter-masked readout formats min/max plus per-frame delta (heap) or a
+  p99 (frame-time fallback, sorted in a pre-allocated scratch buffer) into
+  $-cached text nodes. An "Alloc storm" toggle is the control: armed, the rAF
+  body deliberately allocates an array + string per frame so the series
+  climbs/sawtooths, proving the meter is live. Steady state holds the heap
+  flat. Sampling and readout add zero allocation off the storm branch.
+
+### Changed
+- demo truth-audit: the Smart Bounds SOFT option label
+  "SOFT -- smoothstep deceleration" -> "SOFT -- quadratic hold-out
+  (decelerates)" (the curve became a quadratic half-zone hold-out at CP-6 /
+  decisions/0005; "smoothstep" now appears zero times in demo/). Both demo
+  pages swept for stale 2.1.x claims -- no other false string found.
+- demo/QuickStart.html: the frame loop's per-frame `cam.viewW = ... /
+  cam.viewH = ...` direct writes (the exact writable-dims trap CP-7 closed --
+  the d.ts declares dims readonly) replaced with the blessed door: a resize
+  listener calling `cam.resize(canvas.width, canvas.height, WORLD_W,
+  WORLD_H)`, registered after the canvas-sizing listener so FIFO order keeps
+  the dims current. Two fewer writes per frame; the demo now teaches the
+  2.1.0 contract instead of the trap. Verified on a cold-origin drill
+  (console clean, v2.1.1 stamped from the library VERSION const).
+- ASCII sweep (the debt the gate now forbids): 7,457 bytes of non-ASCII
+  across nine src files (U+2500 banner runs, em/en dashes, arrows, U+00B2)
+  and 195 bytes in README.md replaced with ASCII equivalents at identical
+  character widths. decisions/, test/, llms.txt, CHANGELOG.md and LICENSE
+  were already clean. Proof the sweep is comment-only: of the 8 esbuild
+  entry bundles, 5 are SHA-256-identical pre/post and the 3 that differ
+  (".", ./sequence, ./shake) differ ONLY in comment lines -- zero code
+  lines changed. Comments survive esbuild's unminified output, so measured
+  weights moved DOWN: "." 18109 -> 18021 B gz (17.68 -> 17.60 KB),
+  ./sequence 7.41 -> 7.40 KB, ./shake 3164 -> 3148 B gz (3.09 -> 3.07 KB);
+  budgets unchanged (ceilings).
+- llms.txt: two stale 2.0.x lifecycle claims corrected to the shipped 2.1.0
+  behavior -- natural completion now documents the CP-24 auto-release (first
+  update() after completion; zero-step play() no-op), and "re-entrant
+  destroy/stop is unguarded (routed to PRO4)" now documents the CP-20 door
+  + decisions/0008 contract (clean frame abort; ERR_CAMERA_DESTROYED after).
+- README rebuilt on the LiteSepforge blueprint spine (positioning H2 ->
+  TOC -> Why this exists -> What you get -> shake-engine deep-dive -> API
+  reference -> Composability -> Zero-GC notes -> Design decisions ->
+  Migration -> Testing -> What this is not -> Ecosystem -> License), with
+  the stale claims corrected: the false "Zero external deps" box is replaced
+  by the recorded dependency story (five first-party @zakkster deps, zero
+  third-party, lite-timeline only via ./sequence, decisions/0001); the hard
+  "348 tests" is replaced by the live count (385); the mermaid architecture /
+  dependency / flow diagrams are dropped (npm renders raw, line counts
+  drift); the Module Reference "Lines" column is replaced by measured gz
+  subpath weights; and the migration guide's F1 claim is fixed -- the
+  `getPreset` guard is OPTIONAL, not mandatory (cam.shake(null) is a
+  documented no-op since 2.1.0).
+- Version triangle -> 2.1.1.
+
+### Removed
+- `Cookbook.md` (25.6 KB unversioned sidecar; still-true recipes folded into
+  README/llms -- the sink recipe, soft bounds, parallax wrap, shake
+  layering; the rest duplicated the API reference). Never shipped in
+  `files[]`.
+- `examples/` (five 1.x-era scaffolds superseded by `demo/`):
+  lite-camera-pro-day1-demo.html, lite-camera-pro-day2-demo.html,
+  lite-camera-pro-day3-demo.html, lite-camera-pro-phase2-demo.html,
+  lite-camera-pro-phase3-demo.html. Never shipped in `files[]`.
+
 ## [2.1.0] -- 2026-08-31
 
 Subsystem truth: four documented behaviors that were false are now measured

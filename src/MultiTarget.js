@@ -1,8 +1,8 @@
 /**
- * @zakkster/lite-camera-pro — Multi-Target Framing
+ * @zakkster/lite-camera-pro -- Multi-Target Framing
  *
  * Calculates camera position and zoom to keep multiple targets visible.
- * Zero allocations per frame — all state is pre-allocated on the camera.
+ * Zero allocations per frame -- all state is pre-allocated on the camera.
  *
  * Used by boss fights, co-op, cutscenes tracking multiple actors.
  *
@@ -33,7 +33,7 @@ export function updateMultiTarget(cam, dt, targets, count) {
 
     const mt = cam._mt;
 
-    // ── 1. Compute bounding box of all targets ──
+    // -- 1. Compute bounding box of all targets --
     let minX = targets[0].x;
     let maxX = minX;
     let minY = targets[0].y;
@@ -48,17 +48,17 @@ export function updateMultiTarget(cam, dt, targets, count) {
         if (ty > maxY) maxY = ty;
     }
 
-    // ── 2. Center of the bounding box ──
+    // -- 2. Center of the bounding box --
     const centerX = (minX + maxX) * 0.5;
     const centerY = (minY + maxY) * 0.5;
 
-    // ── 3. Required world-space dimensions (with padding) ──
+    // -- 3. Required world-space dimensions (with padding) --
     // Minimum bbox = viewport at maxZoom, prevents near-zero division
     const minBBox = 100; // minimum world-space pixels to prevent extreme zoom
     const bboxW = Math.max((maxX - minX) + mt.paddingX * 2, minBBox);
     const bboxH = Math.max((maxY - minY) + mt.paddingY * 2, minBBox);
 
-    // ── 4. Compute zoom to fit bbox into viewport ──
+    // -- 4. Compute zoom to fit bbox into viewport --
     const zoomX = cam.viewW / bboxW;
     const zoomY = cam.viewH / bboxH;
     let desiredZoom = Math.min(zoomX, zoomY);
@@ -70,12 +70,12 @@ export function updateMultiTarget(cam, dt, targets, count) {
     if (desiredZoom < mt.minZoom) desiredZoom = mt.minZoom;
     if (desiredZoom > mt.maxZoom) desiredZoom = mt.maxZoom;
 
-    // ── 5. Smooth zoom toward desired ──
+    // -- 5. Smooth zoom toward desired --
     // Exponential damping: cam.zoom approaches desiredZoom at mt.zoomSpeed rate
     const zoomLerp = 1 - Math.exp(-mt.zoomSpeed * dt);
     cam.zoom += (desiredZoom - cam.zoom) * zoomLerp;
 
-    // ── 6. Update visible dimensions after zoom change ──
+    // -- 6. Update visible dimensions after zoom change --
     cam.visibleW = cam.viewW / cam.zoom;
     cam.visibleH = cam.viewH / cam.zoom;
     cam._maxX = cam.worldW - cam.visibleW;
@@ -83,7 +83,7 @@ export function updateMultiTarget(cam, dt, targets, count) {
     if (cam._maxX < 0) cam._maxX = 0;
     if (cam._maxY < 0) cam._maxY = 0;
 
-    // ── 7. Camera target = center of bbox, offset by half-visible ──
+    // -- 7. Camera target = center of bbox, offset by half-visible --
     const desiredX = centerX - cam.visibleW * 0.5;
     const desiredY = centerY - cam.visibleH * 0.5;
 

@@ -6,7 +6,7 @@
  * Zero external dependencies outside the @zakkster ecosystem.
  */
 
-export const VERSION = "2.1.0";
+export const VERSION = "2.1.1";
 
 // v2.0.0 detach (CP-21/CP-22/CP-23): the root barrel exports exactly the 22
 // names the class itself reaches (D5; clampToBounds + setSoftZone joined at

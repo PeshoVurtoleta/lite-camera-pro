@@ -91,6 +91,7 @@ import CinematicCameraPro, {
     FollowMode,
     type CameraAttachErrorCode,
     type CameraDoorErrorCode,
+    type CameraProSink,
 } from '@zakkster/lite-camera-pro';
 import { withSequences, type CameraSequence } from '@zakkster/lite-camera-pro/sequence';
 import { withParallax } from '@zakkster/lite-camera-pro/parallax';
@@ -130,5 +131,25 @@ const c4: CameraDoorErrorCode = 'ERR_CAMERA_SHAKE';
 // Dims are readonly (match the base): resize() is the only blessed write path.
 // @ts-expect-error viewW is readonly -- write it only through resize().
 cam.viewW = 100;
+
+// -- apply(ctx: CameraProSink): the sink contract (note B) -------------------
+// (a) A CanvasRenderingContext2D structurally satisfies CameraProSink.
+declare const canvasCtx: CanvasRenderingContext2D;
+cam.apply(canvasCtx);
+// (b) So does any three-method recorder object (translate + rotate + scale).
+const recorder: CameraProSink = {
+    translate(x: number, y: number): void { void x; void y; },
+    rotate(a: number): void { void a; },
+    scale(x: number, y: number): void { void x; void y; },
+};
+cam.apply(recorder);
+// (c) NEGATIVE CASE (documented, kept commented): a two-method sink missing
+// scale() is NOT a CameraProSink and must fail to compile. Verified once by
+// uncommenting -- tsc errors on the absent scale property -- then re-commented.
+// cam.apply({
+//     translate(x: number, y: number): void { void x; void y; },
+//     rotate(a: number): void { void a; },
+// });
+
 void version; void dur; void zoom; void cfg; void errCode;
 void trauma; void visW; void c1; void c2; void c3; void c4;

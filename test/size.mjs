@@ -48,6 +48,7 @@ const SHAKE_GZ_BUDGET = 16384;      // bytes -- charter number, fixed.
 // "." -- import-graph + bundle-literals still green); this is new surface, not
 // re-entangling. Re-measured + 0.25 KB slack, never widened to pass. See
 // decisions/0005-0008 and the v2.1.0 CHANGELOG.
+// Post-PRO5 ASCII sweep measured 18021 B (comments survive esbuild; budget unchanged).
 const DOT_GZ_BUDGET = 18365;        // bytes -- 18109 measured + 256 slack.
 const NOISE_SOURCE_BYTES = 39613;   // Noise.js source size.
 const NOISE_SHARE_TRIGGER = 0.5;    // >= 50% -> upstream regression.

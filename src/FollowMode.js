@@ -1,5 +1,5 @@
 /**
- * @zakkster/lite-camera-pro — Follow Mode Strategies
+ * @zakkster/lite-camera-pro -- Follow Mode Strategies
  *
  * Each mode is a pure function:
  *   (camera, dt, px, py, pvx, pvy) => void
@@ -8,11 +8,11 @@
  * The camera's update() dispatches to the active strategy.
  *
  * Modes:
- *   SMOOTH      — lerp + deadzone + lookahead (default, same as lite-camera)
- *   LOCK        — snap to target, no interpolation
- *   PREDICTIVE  — heavy velocity extrapolation, aggressive lookahead
- *   CUT         — instant jump (for cutscene hard cuts)
- *   HYBRID      — smooth horizontal, locked vertical (platformer standard)
+ *   SMOOTH      -- lerp + deadzone + lookahead (default, same as lite-camera)
+ *   LOCK        -- snap to target, no interpolation
+ *   PREDICTIVE  -- heavy velocity extrapolation, aggressive lookahead
+ *   CUT         -- instant jump (for cutscene hard cuts)
+ *   HYBRID      -- smooth horizontal, locked vertical (platformer standard)
  */
 
 /** @enum {number} */
@@ -25,7 +25,7 @@ export const FollowMode = {
 };
 
 /**
- * SMOOTH — Default. Deadzone + lookahead + lerp.
+ * SMOOTH -- Default. Deadzone + lookahead + lerp.
  * This is the same behavior as lite-camera base.
  */
 function smooth(cam, dt, px, py, pvx, pvy) {
@@ -54,7 +54,7 @@ function smooth(cam, dt, px, py, pvx, pvy) {
 }
 
 /**
- * LOCK — Camera snaps instantly to center on target.
+ * LOCK -- Camera snaps instantly to center on target.
  * No deadzone, no lookahead, no lerp.
  * Useful for: top-down shooters, fixed-camera moments.
  */
@@ -75,9 +75,9 @@ function lock(cam, dt, px, py, pvx, pvy) {
 }
 
 /**
- * PREDICTIVE — Aggressive lookahead using raw velocity extrapolation.
+ * PREDICTIVE -- Aggressive lookahead using raw velocity extrapolation.
  * Looks further ahead than SMOOTH, and scales with speed (not just direction).
- * No deadzone — the camera actively chases the predicted position.
+ * No deadzone -- the camera actively chases the predicted position.
  * Useful for: racing games, fast runners, bullet-hell dodge patterns.
  *
  * Uses cam.predictTime (seconds of extrapolation, default 0.3).
@@ -92,7 +92,7 @@ function predictive(cam, dt, px, py, pvx, pvy) {
     const halfVisW = cam.visibleW * 0.5;
     const halfVisH = cam.visibleH * 0.5;
 
-    // Lerp lookahead toward predicted offset (not normalized — scales with speed)
+    // Lerp lookahead toward predicted offset (not normalized -- scales with speed)
     const targetLx = predX - px;
     const targetLy = predY - py;
     cam.look[0] += (targetLx - cam.look[0]) * cam.lookaheadSpeed * dt;
@@ -104,7 +104,7 @@ function predictive(cam, dt, px, py, pvx, pvy) {
 }
 
 /**
- * CUT — Hard cut to center on target. Identical to LOCK but designed
+ * CUT -- Hard cut to center on target. Identical to LOCK but designed
  * to be used as a one-frame mode switch for cutscene transitions.
  * After the cut, you'd typically switch to SMOOTH or LOCK.
  *
@@ -124,7 +124,7 @@ function cut(cam, dt, px, py, pvx, pvy) {
 }
 
 /**
- * HYBRID — Smooth horizontal (with deadzone + lookahead), locked vertical.
+ * HYBRID -- Smooth horizontal (with deadzone + lookahead), locked vertical.
  * The platformer standard: horizontal feels cinematic, vertical is
  * pixel-precise so platforms don't jitter.
  *
@@ -132,7 +132,7 @@ function cut(cam, dt, px, py, pvx, pvy) {
  * vertical uses instant snap or fast lerp.
  */
 function hybrid(cam, dt, px, py, pvx, pvy) {
-    // ── Horizontal: full smooth behavior ──
+    // -- Horizontal: full smooth behavior --
     const len = Math.sqrt(pvx * pvx + pvy * pvy);
     const targetLx = len > 0 ? (pvx / len) * cam.lookaheadDist : 0;
     cam.look[0] += (targetLx - cam.look[0]) * cam.lookaheadSpeed * dt;
@@ -147,7 +147,7 @@ function hybrid(cam, dt, px, py, pvx, pvy) {
     else if (desiredX > cam.target[0] + cam.deadzoneX)
         cam.target[0] = desiredX - cam.deadzoneX;
 
-    // ── Vertical: locked (snap or fast lerp) ──
+    // -- Vertical: locked (snap or fast lerp) --
     const desiredY = py - halfVisH;
 
     if (cam.hybridVerticalSnap !== false) {

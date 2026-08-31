@@ -1,5 +1,5 @@
 /**
- * @zakkster/lite-camera-pro — Cinematic Camera System
+ * @zakkster/lite-camera-pro -- Cinematic Camera System
  *
  * Day 1: Pro scaffold + zoom system
  *
@@ -7,8 +7,8 @@
  *  - Smooth zoom transitions (duration + easing)
  *  - Zoom-at-point (anchor zoom)
  *  - Zoom-aware world bounds
- *  - Screen ↔ world coordinate conversion
- *  - Visible-area–corrected follow centering
+ *  - Screen <-> world coordinate conversion
+ *  - Visible-area--corrected follow centering
  *
  * Depends on: @zakkster/lite-camera, @zakkster/lite-lerp, @zakkster/lite-ease
  * Zero external deps. Pure math. Canvas2D only.
@@ -94,19 +94,19 @@ export class CinematicCameraPro extends CinematicCamera {
     constructor(viewW, viewH, worldW, worldH, seed = 42) {
         super(viewW, viewH, worldW, worldH, seed);
 
-        // ── Zoom state ──
+        // -- Zoom state --
         this.zoom = 1.0;
         this.minZoom = 0.25;
         this.maxZoom = 4.0;
 
-        // ── Zoom animation ──
+        // -- Zoom animation --
         this._zoomFrom = 1.0;
         this._zoomTo = 1.0;
         this._zoomDur = 0;   // seconds
         this._zoomElapsed = 0;
         this._zoomEase = null;
 
-        // ── Zoom anchor (for zoomAt) ──
+        // -- Zoom anchor (for zoomAt) --
         // Static anchor coords (for zoomAt with raw coordinates)
         this._zoomAnchorX = 0;
         this._zoomAnchorY = 0;
@@ -114,17 +114,17 @@ export class CinematicCameraPro extends CinematicCamera {
         this._zoomTarget = null;
         this._hasAnchor = false;
 
-        // ── Cached visible dimensions (zero-alloc frustum culling) ──
+        // -- Cached visible dimensions (zero-alloc frustum culling) --
         this.visibleW = viewW;
         this.visibleH = viewH;
 
-        // ── Follow mode ──
+        // -- Follow mode --
         this.mode = FollowMode.SMOOTH;
 
-        // ── Predictive mode config ──
+        // -- Predictive mode config --
         this.predictTime = 0.3; // seconds of velocity extrapolation
 
-        // ── Hybrid mode config ──
+        // -- Hybrid mode config --
         this.hybridVerticalSnap = true; // true = instant, false = fast lerp
 
         // -- dt policy tunable (see decisions/0002-dt-policy.md) --
@@ -134,10 +134,10 @@ export class CinematicCameraPro extends CinematicCamera {
         // contract (D-f). A dt exactly == maxDt passes unclamped (H-D).
         this.maxDt = 0.1; // seconds
 
-        // ── Multi-target framing ──
+        // -- Multi-target framing --
         this._mt = createMultiTargetState();
 
-        // ── Advanced shake engine (replaces base RNG shake) ──
+        // -- Advanced shake engine (replaces base RNG shake) --
         this._shake = createShakeState(seed);
 
         // -- Base shake bridge (CP-9 / D3, decisions/0007) --
@@ -151,10 +151,10 @@ export class CinematicCameraPro extends CinematicCamera {
         this._baseMaxOffset = 15;
         this._baseMaxAngle = 0.05;
 
-        // ── Active sequence (null when no sequence is playing) ──
+        // -- Active sequence (null when no sequence is playing) --
         this._seq = null;
 
-        // ── Blend-back-to-follow remaining time, SECONDS (0 = inactive) ──
+        // -- Blend-back-to-follow remaining time, SECONDS (0 = inactive) --
         // Armed when a sequence COMPLETES (from seq._state.blend, the seconds
         // blendOutTime); update() step 6 glides pos to the follow target over
         // this window, then lands exactly. stop()/destroy() and a new/stopped
@@ -171,7 +171,7 @@ export class CinematicCameraPro extends CinematicCamera {
         this._parallax = null;
         this._parallaxTick = null;
 
-        // ── Smart bounds system ──
+        // -- Smart bounds system --
         this._bounds = createBoundsState();
 
         // -- Debug HUD configuration (null until withDebug attaches, CP-22) --
@@ -187,9 +187,9 @@ export class CinematicCameraPro extends CinematicCamera {
         this._destroyed = false;
     }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  FOLLOW MODE API
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Set the follow mode. Switch mid-gameplay without position jumps
@@ -215,16 +215,16 @@ export class CinematicCameraPro extends CinematicCamera {
         return this;
     }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  MULTI-TARGET FRAMING API
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Track multiple targets. Camera auto-zooms and centers to keep
      * all targets visible within the viewport.
      *
      * While active, the normal follow mode and manual zoom animations
-     * are paused — the multi-target system controls position and zoom.
+     * are paused -- the multi-target system controls position and zoom.
      *
      * @param {{x:number,y:number}[]} targets  Array of objects with .x/.y
      * @param {Object} [options]
@@ -284,7 +284,7 @@ export class CinematicCameraPro extends CinematicCamera {
     /**
      * Stop multi-target tracking. Returns to normal follow mode.
      * The camera smoothly transitions back because the lerp is
-     * still running — no jarring cut.
+     * still running -- no jarring cut.
      *
      * @returns {CinematicCameraPro} this
      */
@@ -317,9 +317,9 @@ export class CinematicCameraPro extends CinematicCamera {
         return this;
     }
 
-    // ─────────────────────────────────────────────────────
-    //  SHAKE API (Pro — noise-based, layered)
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
+    //  SHAKE API (Pro -- noise-based, layered)
+    // -----------------------------------------------------
 
     /**
      * Add simple trauma. Backward-compatible with lite-camera.
@@ -461,7 +461,7 @@ export class CinematicCameraPro extends CinematicCamera {
 
     /**
      * Fire a shake impulse with a full profile. Multiple shakes
-     * can run simultaneously — they layer (sum) together.
+     * can run simultaneously -- they layer (sum) together.
      *
      * @param {Object} profile  Shake profile
      * @param {number} profile.trauma      Initial trauma [0, 1]
@@ -491,9 +491,9 @@ export class CinematicCameraPro extends CinematicCamera {
         return this;
     }
 
-    // ─────────────────────────────────────────────────────
-    //  SEQUENCE API (Pro — cinematic timeline control)
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
+    //  SEQUENCE API (Pro -- cinematic timeline control)
+    // -----------------------------------------------------
 
     /**
      * Create a new camera sequence bound to this camera.
@@ -524,7 +524,7 @@ export class CinematicCameraPro extends CinematicCamera {
      * The camera takes ownership of the sequence. If another sequence is
      * currently attached, it is destroyed (its timeline releases the shared
      * ticker reference) before the new one starts. Do NOT pass a sequence
-     * to playSequence again after it has been replaced — call stopSequence()
+     * to playSequence again after it has been replaced -- call stopSequence()
      * first if you want to re-use it later.
 
      * @param {CameraSequence} seq
@@ -574,9 +574,9 @@ export class CinematicCameraPro extends CinematicCamera {
         return this._seq !== null && this._seq.playing;
     }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  PARALLAX API
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Add a parallax layer. Speed 1.0 = normal, 0.5 = background, 1.5 = foreground.
@@ -621,9 +621,9 @@ export class CinematicCameraPro extends CinematicCamera {
      */
     applyParallax() { _parallaxNotAttached(); }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  BOUNDS API
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Set boundary behavior for all edges.
@@ -643,7 +643,7 @@ export class CinematicCameraPro extends CinematicCamera {
     /**
      * Set boundary behavior per-edge.
      *
-     * @param {Object} config  { left, right, top, bottom } — BoundsType values
+     * @param {Object} config  { left, right, top, bottom } -- BoundsType values
      * @returns {CinematicCameraPro} this
      *
      * @example
@@ -698,9 +698,9 @@ export class CinematicCameraPro extends CinematicCamera {
         return this;
     }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  ZOOM API
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Smoothly transition to a zoom level.
@@ -766,7 +766,7 @@ export class CinematicCameraPro extends CinematicCamera {
      * @example
      * // Static point
      * camera.zoomAt(400, 300, 1.8, 0.8, easeOutExpo);
-     * // Moving target — anchor follows the object each frame
+     * // Moving target -- anchor follows the object each frame
      * camera.zoomAt(boss, 1.8, 0.8, easeOutExpo);
      */
     zoomAt(targetOrX, yOrLevel, levelOrDur, duration = 0, ease = null) {
@@ -786,7 +786,7 @@ export class CinematicCameraPro extends CinematicCamera {
             anchorY = targetOrX.y;
             level = yOrLevel;
             dur = levelOrDur !== undefined ? levelOrDur : 0;
-            easeFn = duration; // shifted arg position — duration slot holds ease
+            easeFn = duration; // shifted arg position -- duration slot holds ease
         } else {
             // zoomAt(x, y, level, duration, ease)
             target = null;
@@ -830,9 +830,9 @@ export class CinematicCameraPro extends CinematicCamera {
         return this;
     }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  COORDINATE CONVERSION (zero-alloc: caller provides out)
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Convert screen pixel to world coordinate. Zero-alloc.
@@ -910,9 +910,9 @@ export class CinematicCameraPro extends CinematicCamera {
         return this;
     }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  INTERNAL: Zoom helpers
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /** Recalculate world-edge clamp bounds and cached visible dimensions for current zoom. */
     _updateBoundsForZoom() {
@@ -949,9 +949,9 @@ export class CinematicCameraPro extends CinematicCamera {
         this.target[1] = newY;
     }
 
-    // ─────────────────────────────────────────────────────
-    //  UPDATE  (overrides base — adds zoom + corrected centering)
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
+    //  UPDATE  (overrides base -- adds zoom + corrected centering)
+    // -----------------------------------------------------
 
     /**
      * Advance the camera by one frame.
@@ -982,7 +982,7 @@ export class CinematicCameraPro extends CinematicCamera {
         const seq = this._seq;
 
         if (seq && seq._state.active) {
-            // ── SEQUENCE PATH ──
+            // -- SEQUENCE PATH --
             // Sequence controls position and zoom via timeline.
             // Timeline advances itself via its own ticker (RAF).
             // We just read the animated state and apply it.
@@ -991,7 +991,7 @@ export class CinematicCameraPro extends CinematicCamera {
             this.zoom = clamp(st.zoom, this.minZoom, this.maxZoom);
             this._updateBoundsForZoom();
 
-            // Sequence stores world CENTER — convert to top-left for camera
+            // Sequence stores world CENTER -- convert to top-left for camera
             this.target[0] = st.x - this.visibleW * 0.5;
             this.target[1] = st.y - this.visibleH * 0.5;
 
@@ -1000,7 +1000,7 @@ export class CinematicCameraPro extends CinematicCamera {
             this.look[1] = 0;
 
         } else if (mt.active && mt.targets && mt.count > 0) {
-            // ── MULTI-TARGET PATH ──
+            // -- MULTI-TARGET PATH --
             updateMultiTarget(this, dt, mt.targets, mt.count);
 
             // Clean up finished sequence ref; adopt its blend-out budget (D-b)
@@ -1022,7 +1022,7 @@ export class CinematicCameraPro extends CinematicCamera {
             }
 
         } else {
-            // ── SINGLE-TARGET PATH ──
+            // -- SINGLE-TARGET PATH --
 
             // Clean up finished sequence ref; adopt its blend-out budget (D-b)
             // so step 6 glides back to follow. seq._state.blend is armed by a
@@ -1042,7 +1042,7 @@ export class CinematicCameraPro extends CinematicCamera {
                 this._seq = null;
             }
 
-            // ── 1. Advance zoom animation ──
+            // -- 1. Advance zoom animation --
             const prevZoom = this.zoom;
 
             if (this._zoomDur > 0) {
@@ -1067,17 +1067,17 @@ export class CinematicCameraPro extends CinematicCamera {
                 }
             }
 
-            // ── 2. Recalculate bounds for current zoom ──
+            // -- 2. Recalculate bounds for current zoom --
             this._updateBoundsForZoom();
 
-            // ── 3–4. Anchored zoom OR follow strategy (mutually exclusive) ──
+            // -- 3--4. Anchored zoom OR follow strategy (mutually exclusive) --
             if (this._hasAnchor) {
                 // Track moving anchor each frame
                 if (this._zoomTarget) {
                     this._zoomAnchorX = this._zoomTarget.x;
                     this._zoomAnchorY = this._zoomTarget.y;
                 }
-                // Center on the anchor — strategy is paused during the transition.
+                // Center on the anchor -- strategy is paused during the transition.
                 // pos lerps toward this in step 6, giving a smooth pan-and-zoom.
                 this.target[0] = this._zoomAnchorX - this.visibleW * 0.5;
                 this.target[1] = this._zoomAnchorY - this.visibleH * 0.5;
@@ -1092,16 +1092,16 @@ export class CinematicCameraPro extends CinematicCamera {
             }
         }
 
-        // ── 5. Apply boundary enforcement (all paths) ──
+        // -- 5. Apply boundary enforcement (all paths) --
         applyBounds(
             this._bounds, this.target, this.pos,
             this._maxX, this._maxY,
             this.visibleW, this.visibleH, dt
         );
 
-        // ── 6. Position update ──
+        // -- 6. Position update --
         // Sequences and multi-target each manage their own smoothing:
-        //   - Sequence: timeline is authoritative — pos must land exactly on
+        //   - Sequence: timeline is authoritative -- pos must land exactly on
         //     scripted beats (e.g. bossReveal must frame the boss precisely).
         //   - Multi-target: updateMultiTarget already lerps target by mt.followSpeed;
         //     a second lerp here would compound damping unpredictably.
@@ -1131,7 +1131,7 @@ export class CinematicCameraPro extends CinematicCamera {
             this.pos[0] += (this.target[0] - this.pos[0]) * this.lerpSpeed * dt;
             this.pos[1] += (this.target[1] - this.pos[1]) * this.lerpSpeed * dt;
         }
-        // ── 7. Parallax layer update (all paths) ──
+        // -- 7. Parallax layer update (all paths) --
         // _parallax is null until withParallax() attaches (CP-22); the null
         // compare guards it (D2: measured delta 2.070 ns/op, shipped over a
         // state-forking sentinel -- decisions/0004). The tick fn is on the instance,
@@ -1140,13 +1140,13 @@ export class CinematicCameraPro extends CinematicCamera {
             this._parallaxTick(this._parallax, this.pos[0], this.pos[1], this.zoom);
         }
 
-        // ── 8. Shake update (all paths) ──
+        // -- 8. Shake update (all paths) --
         updateShake(this._shake, dt);
     }
 
-    // ─────────────────────────────────────────────────────
-    //  APPLY  (overrides base — adds zoom transform)
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
+    //  APPLY  (overrides base -- adds zoom transform)
+    // -----------------------------------------------------
 
     /**
      * Apply camera transform to a canvas 2D context.
@@ -1175,7 +1175,7 @@ export class CinematicCameraPro extends CinematicCamera {
         // 1. Shake offset (screen-space, unaffected by zoom)
         ctx.translate(offsetX, offsetY);
 
-        // 2–5. Zoom + rotation from screen center
+        // 2--5. Zoom + rotation from screen center
         ctx.translate(this._halfW, this._halfH);
         ctx.rotate(angle);
         ctx.scale(this.zoom, this.zoom);
@@ -1187,9 +1187,9 @@ export class CinematicCameraPro extends CinematicCamera {
         ctx.translate(-Math.floor(this.pos[0]), -Math.floor(this.pos[1]));
     }
 
-    // ─────────────────────────────────────────────────────
-    //  DEBUG  (overrides base — adds zoom readout)
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
+    //  DEBUG  (overrides base -- adds zoom readout)
+    // -----------------------------------------------------
 
     /**
      * Draw world-space debug overlay (deadzone, lookahead, world bounds).
@@ -1213,9 +1213,9 @@ export class CinematicCameraPro extends CinematicCamera {
      */
     debugHUD() { _debugNotAttached(); }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  SAVE / LOAD
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Get a serializable snapshot of camera state for save/load.

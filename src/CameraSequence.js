@@ -1,5 +1,5 @@
 /**
- * @zakkster/lite-camera-pro — Camera Sequence System
+ * @zakkster/lite-camera-pro -- Camera Sequence System
  *
  * Fluent builder for scripted camera cinematics.
  * Powered by @zakkster/lite-timeline under the hood.
@@ -44,7 +44,7 @@ function resolveAt(opts, alt) {
 /**
  * Create a new camera sequence.
  *
- * The sequence does NOT play automatically — call .play() on the camera
+ * The sequence does NOT play automatically -- call .play() on the camera
  * or let playSequence() handle it.
  *
  * Units: step durations (moveTo/zoomTo/wait/...) are MILLISECONDS (timeline
@@ -89,7 +89,7 @@ export function createCameraSequence(cam, options = {}) {
         blendOutTime = 0.3,
     } = options;
 
-    // ── Fail-closed door (cold, setup-time): blendOutTime is SECONDS
+    // -- Fail-closed door (cold, setup-time): blendOutTime is SECONDS
     // (class-API units) -- it integrates against update(dt) seconds. Step
     // durations on this same builder are MILLISECONDS (timeline units).
     // 0 is legal (a hard handoff to follow, the 1.2.0 behavior exactly);
@@ -103,20 +103,20 @@ export function createCameraSequence(cam, options = {}) {
         throw e;
     }
 
-    // ── Snapshot: captured when play() is called ──
+    // -- Snapshot: captured when play() is called --
     let snapX = 0;
     let snapY = 0;
     let snapZoom = 1;
 
-    // ── Step queue (built during chaining, consumed when play() builds timeline) ──
+    // -- Step queue (built during chaining, consumed when play() builds timeline) --
     const steps = [];
 
-    // ── The underlying timeline (created lazily on play) ──
+    // -- The underlying timeline (created lazily on play) --
     let timeline = null;
     let isPlaying = false;
     let isDestroyed = false;
 
-    // ── Internal: the "current" animated state that steps write to ──
+    // -- Internal: the "current" animated state that steps write to --
     // These are read by updateSequence() to drive the camera.
     const state = {
         x: 0,
@@ -130,9 +130,9 @@ export function createCameraSequence(cam, options = {}) {
         blend: 0,
     };
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  STEP TYPES
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     /**
      * Internal: Add a step to the queue.
@@ -147,7 +147,7 @@ export function createCameraSequence(cam, options = {}) {
     /**
      * Snapshot current camera state and build a fresh timeline.
      * Always destroys any prior timeline so play()/seek() are safe to call
-     * repeatedly — each (re)build re-snaps the current camera state.
+     * repeatedly -- each (re)build re-snaps the current camera state.
      */
 
     function buildTimeline() {
@@ -176,7 +176,7 @@ export function createCameraSequence(cam, options = {}) {
             },
         });
 
-        // Track the "from" values as we chain — each step's start
+        // Track the "from" values as we chain -- each step's start
         // is the previous step's end target.
         let curX = snapX;
         let curY = snapY;
@@ -223,7 +223,7 @@ export function createCameraSequence(cam, options = {}) {
                 case 'shake': {
                     const {profile, intensity} = step.params;
                     timeline.add({
-                        duration: 0, // instant — fires once
+                        duration: 0, // instant -- fires once
                         onComplete: () => {
                             addShake(cam._shake, profile, intensity);
                         },
@@ -268,9 +268,9 @@ export function createCameraSequence(cam, options = {}) {
         }
     }
 
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
     //  PUBLIC: Fluent builder API
-    // ─────────────────────────────────────────────────────
+    // -----------------------------------------------------
 
     const seq = {
 
@@ -407,9 +407,9 @@ export function createCameraSequence(cam, options = {}) {
             return seq;
         },
 
-        // ─────────────────────────────────────────────────
+        // -------------------------------------------------
         //  PLAYBACK CONTROL
-        // ─────────────────────────────────────────────────
+        // -------------------------------------------------
 
         /** Build and start the sequence. Usually called via camera.playSequence(). */
         play() {
@@ -425,7 +425,7 @@ export function createCameraSequence(cam, options = {}) {
                 state.active = false;
                 return seq;
             }
-            // Always rebuild — each play() captures the current camera state.
+            // Always rebuild -- each play() captures the current camera state.
             buildTimeline();
             state.active = true;
             isPlaying = true;
@@ -490,7 +490,7 @@ export function createCameraSequence(cam, options = {}) {
         },
 
         /**
-         * Total sequence duration in ms. Computed from queued steps —
+         * Total sequence duration in ms. Computed from queued steps --
          * does NOT build the timeline or take a camera snapshot.
          * Caveat: `at`-positioned overlaps are not accounted for -- while a
          * timeline is live this returns its at-aware duration, but after stop()
@@ -508,7 +508,7 @@ export function createCameraSequence(cam, options = {}) {
             return total;
         },
 
-        /** Current progress (0–1). */
+        /** Current progress (0--1). */
         get progress() {
             return timeline ? timeline.progress : 0;
         },
@@ -530,9 +530,9 @@ export function createCameraSequence(cam, options = {}) {
             steps.length = 0;
         },
 
-        // ─────────────────────────────────────────────────
+        // -------------------------------------------------
         //  INTERNAL: accessed by camera.update()
-        // ─────────────────────────────────────────────────
+        // -------------------------------------------------
 
         /** @internal */
         _state: state,
@@ -541,9 +541,9 @@ export function createCameraSequence(cam, options = {}) {
     return seq;
 }
 
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 //  SEQUENCE PRESETS (Day 9)
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 
 /**
  * Simple pan from current position to a world point.

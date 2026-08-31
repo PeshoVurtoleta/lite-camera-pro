@@ -1,8 +1,8 @@
 /**
- * @zakkster/lite-camera-pro — Debug HUD
+ * @zakkster/lite-camera-pro -- Debug HUD
  *
  * Full screen-space debug overlay with toggleable panels.
- * Renders directly to canvas — no DOM, no HTML.
+ * Renders directly to canvas -- no DOM, no HTML.
  *
  * Panels: position, zoom, follow mode, shake, sequence, parallax, bounds.
  * Each panel can be toggled on/off individually.
@@ -29,7 +29,7 @@ const BOUNDS_NAMES = ['HARD', 'SOFT', 'ELASTIC', 'NONE'];
 
 /**
  * Create debug HUD configuration.
- * @returns {Object} HUD config — mutate .show to toggle panels
+ * @returns {Object} HUD config -- mutate .show to toggle panels
  */
 export function createDebugHUDConfig() {
     return {
@@ -73,7 +73,7 @@ export function drawDebugHUD(cam, ctx, config) {
     ctx.save();
     ctx.font = FONT;
 
-    // ── Pass 1: count lines to size the background ──
+    // -- Pass 1: count lines to size the background --
     let lineCount = 0;
 
     if (show.position) lineCount += 2;
@@ -117,11 +117,11 @@ export function drawDebugHUD(cam, ctx, config) {
         return;
     }
 
-    // ── Background ──
+    // -- Background --
     ctx.fillStyle = BG;
     ctx.fillRect(ox, oy, panelW, lineCount * LINE_H + PAD * 2);
 
-    // ── Pass 2: draw directly, no intermediate objects ──
+    // -- Pass 2: draw directly, no intermediate objects --
     let row = 0;
     const textX = ox + PAD;
     const baseY = oy + PAD;
@@ -237,7 +237,7 @@ export function drawDebugWorld(cam, ctx, config) {
     const cx = cam.target[0] - cam.pos[0] + cam.visibleW * 0.5;
     const cy = cam.target[1] - cam.pos[1] + cam.visibleH * 0.5;
 
-    // ── Deadzone rectangle ──
+    // -- Deadzone rectangle --
     if (show.deadzone !== false) {
         ctx.strokeStyle = 'rgba(251,191,36,0.4)';
         ctx.lineWidth = 1;
@@ -257,7 +257,7 @@ export function drawDebugWorld(cam, ctx, config) {
         ctx.stroke();
     }
 
-    // ── Lookahead vector ──
+    // -- Lookahead vector --
     if (show.lookahead !== false) {
         const lx = cam.look[0];
         const ly = cam.look[1];
@@ -282,7 +282,7 @@ export function drawDebugWorld(cam, ctx, config) {
         }
     }
 
-    // ── World bounds outline ──
+    // -- World bounds outline --
     ctx.strokeStyle = 'rgba(239,68,68,0.2)';
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, cam.worldW, cam.worldH);

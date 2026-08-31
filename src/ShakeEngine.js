@@ -1,5 +1,5 @@
 /**
- * @zakkster/lite-camera-pro — Noise-Based Shake Engine
+ * @zakkster/lite-camera-pro -- Noise-Based Shake Engine
  *
  * Replaces RNG trauma shake with simplex noise for smooth, organic screen shake.
  * Supports layered shakes: multiple simultaneous shake sources sum together.
@@ -11,40 +11,40 @@
 
 import {simplex2} from '@zakkster/lite-noise';
 
-// ── Maximum simultaneous shake layers ──
+// -- Maximum simultaneous shake layers --
 const MAX_SHAKE_SLOTS = 8;
 
-// ── Unique noise offsets so each slot/axis samples different noise ──
-// Slot i, axis j → noise offset = NOISE_SEED_OFFSET * (i * 3 + j)
+// -- Unique noise offsets so each slot/axis samples different noise --
+// Slot i, axis j -> noise offset = NOISE_SEED_OFFSET * (i * 3 + j)
 const NOISE_SEED_OFFSET = 1000;
 
 /**
  * A single shake slot. Pre-allocated, reused via pool.
- * All fields are primitives — zero GC.
+ * All fields are primitives -- zero GC.
  */
 function createShakeSlot() {
     return {
         active: false,
 
         // True when slot was created by addTraumaSimple (generic omni shake).
-        // addTrauma only stacks onto isDefault slots — preset/profile slots
+        // addTrauma only stacks onto isDefault slots -- preset/profile slots
         // have their own freq/decay/maxOffset and shouldn't be polluted with
         // generic trauma added on top.
         isDefault: false,
 
-        // ── Trauma model ──
-        trauma: 0,      // Current trauma [0, 1] — decays over time
+        // -- Trauma model --
+        trauma: 0,      // Current trauma [0, 1] -- decays over time
         decay: 1.0,    // Trauma units lost per second
 
-        // ── Noise parameters ──
+        // -- Noise parameters --
         freq: 15,     // Noise sample frequency (higher = more jittery)
         time: 0,      // Accumulated time for noise sampling
 
-        // ── Output amplitude ──
+        // -- Output amplitude --
         maxOffset: 15,     // Maximum pixel offset at trauma=1
         maxAngle: 0.05,   // Maximum rotation (radians) at trauma=1
 
-        // ── Direction constraint ──
+        // -- Direction constraint --
         // If dirX/dirY are non-zero, shake is constrained to that axis.
         // (0,0) = omnidirectional, (1,0) = horizontal only, (0,1) = vertical only
         dirX: 0,
@@ -75,15 +75,15 @@ export function createShakeState(seedOffset = 0) {
         // Multiply by a prime so adjacent seeds land far apart in noise space.
         seedOffset: (seedOffset | 0) * 7919,
 
-        // ── Computed output (read by apply()) ──
+        // -- Computed output (read by apply()) --
         offsetX: 0,
         offsetY: 0,
         angle: 0,
 
-        // ── Global shake scale (0 = no shake, 1 = normal) ──
+        // -- Global shake scale (0 = no shake, 1 = normal) --
         globalScale: 1.0,
 
-        // ── Whether any slot is active (quick check in apply) ──
+        // -- Whether any slot is active (quick check in apply) --
         active: false,
     };
 }
@@ -106,13 +106,13 @@ function acquireSlot(state) {
         }
     }
 
-    // All slots full — steal the weakest
+    // All slots full -- steal the weakest
     return state.slots[minIdx];
 }
 
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 //  PUBLIC API
-// ─────────────────────────────────────────────────────
+// -----------------------------------------------------
 
 /**
  * Add a shake impulse. Acquires a slot from the pool and configures it.
@@ -214,7 +214,7 @@ export function addTraumaSimple(state, amount) {
     if (!Number.isFinite(amount) || amount <= 0) return;
 
     // Try to find an existing default omni slot to stack onto.
-    // Preset/profile slots are NEVER stacked onto — they have parameters
+    // Preset/profile slots are NEVER stacked onto -- they have parameters
     // (freq, decay, etc.) that addTrauma's generic shake wouldn't match.
     for (let i = 0; i < state.slotCount; i++) {
         const s = state.slots[i];
@@ -224,11 +224,11 @@ export function addTraumaSimple(state, amount) {
         }
     }
 
-    // No active omni slot — populate one inline. No intermediate object literal
+    // No active omni slot -- populate one inline. No intermediate object literal
     // (which would otherwise allocate per call and violate the zero-GC contract).
     const slot = acquireSlot(state);
     slot.active = true;
-    slot.isDefault = true;   // explicit profile/preset — not a generic trauma slot
+    slot.isDefault = true;   // explicit profile/preset -- not a generic trauma slot
     slot.trauma = Math.min(1, amount);
     slot.decay = 1.0;
     slot.freq = 15;
@@ -295,7 +295,7 @@ export function computeShake(state) {
         const s = state.slots[i];
         if (!s.active) continue;
 
-        // trauma² for perceptual scaling (small trauma = barely visible)
+        // trauma^2 for perceptual scaling (small trauma = barely visible)
         const shake = s.trauma * s.trauma;
         const t = s.time * s.freq;
 

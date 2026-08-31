@@ -243,6 +243,12 @@
     cam.debugConfig.show.shake = true;
     cam.debugConfig.show.bounds = true;
 
+    // CP-7 (2.1.0): dims are readonly on the typed surface; cam.resize() is the
+    // one blessed write path (re-derives the visible box, re-clamps the pose).
+    // Registered AFTER the canvas-sizing 'resize' listener above, so the canvas
+    // dims are already current when this fires (listeners run in FIFO order).
+    window.addEventListener('resize', () => cam.resize(canvas.width, canvas.height, WORLD_W, WORLD_H));
+
     // Game State
     const player = {x: 400, y: 400, vx: 0, vy: 0, speed: 300, size: 16};
     const boss = {x: 1800, y: 1200, size: 32};
@@ -577,9 +583,6 @@
         }
 
         // 1. Update Camera
-        // Ensure viewport size is accurate in case of resize
-        cam.viewW = canvas.width;
-        cam.viewH = canvas.height;
         cam.update(dt, player.x, player.y, player.vx * player.speed, player.vy * player.speed);
 
         // 2. Render Setup

@@ -1,5 +1,5 @@
 /**
- * @zakkster/lite-camera-pro — Parallax Layer Manager
+ * @zakkster/lite-camera-pro -- Parallax Layer Manager
  *
  * Manages multiple scroll layers at different speeds.
  * Each layer has a scroll multiplier relative to the camera.
@@ -14,7 +14,7 @@
  * Depends on: nothing (pure math)
  */
 
-// ── Maximum layers ──
+// -- Maximum layers --
 const MAX_LAYERS = 16;
 
 /** Wrap modes for layer tiling */

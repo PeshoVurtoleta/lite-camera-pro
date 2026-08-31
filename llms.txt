@@ -6,7 +6,7 @@
 > engine at the core "." entry; parallax, timeline sequences and a debug HUD are
 > per-instance opt-ins on their own subpaths (v2.0.0 detach).
 
-Version: 2.1.0
+Version: 2.1.1
 
 ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
 CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
@@ -32,6 +32,11 @@ Game loop (once per frame):
 Render:
   ctx.save(); cam.apply(ctx); drawWorld(ctx); ctx.restore();
 - apply(ctx): translates/scales/rotates the canvas to the camera transform (includes shake).
+  apply(ctx) touches exactly ctx.translate(x, y), ctx.rotate(a), ctx.scale(x, y) -- nothing
+  else. ctx is typed CameraProSink (extends the base CameraSink with scale()); a
+  CanvasRenderingContext2D satisfies it, but so does any three-method recorder object, so
+  the camera can drive a non-canvas sink (e.g. a CSS transform on a DOM node -- see the
+  README recorder recipe). Canvas is the default, not a requirement.
 update() dispatches by priority: active sequence > multi-target > single-target follow mode.
 A class-only camera constructs with NO parallax/debug state: cam._parallax === null
 and cam.debugConfig === null until the matching withX attaches (CP-22).
@@ -103,10 +108,20 @@ slot -- a base-style caller's shake works on Pro. shakeTrauma reads the slot
 trauma (else 0); setting <= 0 deactivates it, > 0 assigns min(1, v) (ASSIGNS, not
 accumulates like addTrauma). Writing a max field alone fires no shake. A
 non-finite write throws ERR_CAMERA_SHAKE.
+Noise determinism: the simplex permutation table is a GLOBAL singleton owned by
+lite-noise, not per camera. Calling seedNoise() anywhere in the app re-shapes the shake
+of EVERY camera at once. Each camera offsets its sampling by a per-instance seed
+(constructor seed, default 42) times 7919 (seedOffset), which decorrelates cameras from
+each other -- but does NOT isolate any of them from a global reseed. For reproducible
+shake, seed the global table once at startup and leave it.
 Named presets moved to the ./shake subpath at v2.0.0 (cam.shakePreset was dropped):
   import { getPreset } from '@zakkster/lite-camera-pro/shake';
   const p = getPreset(name); if (p) cam.shake(p, intensity);   // guard now OPTIONAL: getPreset returns null on an unknown name, and cam.shake(null) is a documented no-op (a non-object profile throws ERR_SHAKE_PROFILE)
 Preset names: 'explosion','earthquake','recoil','impact','landing','damage','rumble','heavy_impact'.
+Note A (duration is welded): a preset's on-screen duration is trauma / decay, not a
+separate field. intensity scales BOTH amplitude AND duration (it multiplies trauma). To
+shorten a preset without dropping its peak, copy the profile with a higher decay -- e.g.
+raising decay 0.5 -> 1.6 lands the same peak in 0.63 s.
 Registry (./shake exports): registerPreset(name, profile), listPresets(), getPreset(name).
 Preset constants (./shake): EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT.
 
@@ -132,16 +147,20 @@ A blend is only visible in position-lerping modes (SMOOTH, PREDICTIVE); LOCK/CUT
 (locked vertical) write pos directly. Looping sequences never complete, so never blend.
 Lifecycle triangle: pause() = resumable, ticker held, pose frozen; stop()/stopSequence() =
 replayable (play() rebuilds from a fresh snapshot), ticker RELEASED, no blend; destroy() = dead.
-Natural COMPLETION does not release the ticker: a completed sequence holds its timeline (and
-the shared-ticker refcount) until stop()/destroy()/play() -- release long-lived completed
-sequences explicitly (CP-24).
+Natural COMPLETION auto-releases since 2.1.0 (CP-24): on the FIRST update() after completion
+the camera reads the blend, calls seq.stop(), and drops its ref -- timeline destroyed, shared
+ticker released, steps kept, play() replays. A caller who stops calling update() holds the
+ref until stop()/destroy(). A zero-step play() is a documented no-op (never acquires a ticker).
 resume() is a no-op unless paused (a stopped/completed sequence is NOT replayed -- that would
 re-fire its shakes and .call callbacks; use play() to replay). After stop() the timeline is
 destroyed: progress reads 0 and duration falls back to the naive step-sum (an `at:'+=100'`
 build reads 1600 while live, 1500 after stop). seek() rebuilds from a fresh snapshot when the
 timeline was destroyed, and (like all timeline callbacks) runs user code -- shake/.call steps,
-onComplete -- SYNCHRONOUSLY for every track it crosses. Re-entrant destroy/stop from a sequence
-callback is unguarded (routed to PRO4); defer teardown to the next frame.
+onComplete -- SYNCHRONOUSLY for every track it crosses. Re-entrant teardown is guarded since
+2.1.0 (CP-20, decisions/0008): cam.destroy() from a user callback aborts the frame cleanly
+(the _destroyed door after the zoom-ease call); any later call throws ERR_CAMERA_DESTROYED;
+destroy/stop from a sequence step or onComplete is a named error or clean no-op, never a raw
+crash.
 Sequence preset helpers (./sequence exports, return a sequence): panTo(cam, x, y, ms),
 dramaticZoom(cam, x, y, level, ms), bossReveal(cam, x, y, ms), timedShake(cam, presetName, ms).
 bossReveal captures its return pose at BUILD time -- build it immediately before playing.
@@ -213,14 +232,14 @@ Debug (./debug):           createDebugHUDConfig, drawDebugHUD, drawDebugWorld, w
 ## Subpath exports (import only what you use; gz, esm, unminified, gzip -9)
 Beside the "." main entry, seven subsystem subpaths + "./package.json". Same runtime
 identities as their source modules (one engine, no fork). Per-subpath gz weight:
-  ./shake     3.09 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
+  ./shake     3.07 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
   ./parallax  1.63 KB  createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode, withParallax
   ./bounds    1.55 KB  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, clampToBounds, BoundsType
   ./multi     0.89 KB  createMultiTargetState, updateMultiTarget
   ./follow    0.71 KB  FollowMode, FOLLOW_STRATEGIES
-  ./sequence  7.41 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake, withSequences  (drags lite-timeline + lite-ease by design -- the only subpath that does)
+  ./sequence  7.40 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake, withSequences  (drags lite-timeline + lite-ease by design -- the only subpath that does)
   ./debug     2.10 KB  createDebugHUDConfig, drawDebugHUD, drawDebugWorld, withDebug
-  .           17.68 KB class + the 22-name root surface (no parallax/sequence/debug/presets -- v2.0.0 detach; clampToBounds + setSoftZone joined at 2.1.0)
+  .           17.60 KB class + the 22-name root surface (no parallax/sequence/debug/presets -- v2.0.0 detach; clampToBounds + setSoftZone joined at 2.1.0)
 Self-reference example (shake only):
   import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
 
