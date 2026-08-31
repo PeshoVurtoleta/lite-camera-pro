@@ -3,11 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>lite-camera-pro · Cinematic Demo</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500;700&display=swap"
-          rel="stylesheet">
+    <title>lite-camera-pro &#xB7; Cinematic Demo</title>
     <style>
         :root {
             --bg-0: #07090f;
@@ -31,8 +27,8 @@
             --green: #34d399;
             --green-d: #065f46;
 
-            --display: 'Bricolage Grotesque', system-ui, sans-serif;
-            --mono: 'JetBrains Mono', ui-monospace, monospace;
+            --display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
         }
 
         * {
@@ -60,7 +56,7 @@
             height: 100vh;
         }
 
-        /* ───────── HEADER ───────── */
+        /* --------- HEADER --------- */
         header {
             height: 56px;
             border-bottom: 1px solid var(--line);
@@ -207,10 +203,12 @@
             transition: transform 0.1s, box-shadow 0.1s;
         }
 
-        .btn-director:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.5),
-            0 6px 20px rgba(251, 191, 36, 0.35);
+        @media (hover: hover) {
+            .btn-director:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.5),
+                0 6px 20px rgba(251, 191, 36, 0.35);
+            }
         }
 
         .btn-director:active {
@@ -223,7 +221,7 @@
             0 4px 16px rgba(167, 139, 250, 0.3);
         }
 
-        /* ───────── MAIN ───────── */
+        /* --------- MAIN --------- */
         main {
             display: grid;
             grid-template-columns: 1fr 340px;
@@ -310,10 +308,16 @@
             z-index: 4;
             width: 24px;
             height: 24px;
+            left: var(--mx, -100px);
+            top: var(--my, -100px);
             border: 1px solid var(--cyan);
             border-radius: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
+            opacity: 0;
+        }
+
+        .click-marker.ping {
             animation: ping 0.6s ease-out forwards;
         }
 
@@ -328,7 +332,7 @@
             }
         }
 
-        /* ───────── CONTROL RAIL ───────── */
+        /* --------- CONTROL RAIL --------- */
         .controls {
             background: var(--bg-1);
             border-left: 1px solid var(--line);
@@ -386,8 +390,10 @@
             transition: background 0.15s;
         }
 
-        .panel-header:hover {
-            background: var(--bg-2);
+        @media (hover: hover) {
+            .panel-header:hover {
+                background: var(--bg-2);
+            }
         }
 
         .panel-header::before {
@@ -432,7 +438,7 @@
             display: none;
         }
 
-        /* ── Form controls ── */
+        /* -- Form controls -- */
         .row {
             display: flex;
             align-items: center;
@@ -555,10 +561,12 @@
             overflow: hidden;
         }
 
-        button.btn:hover {
-            background: var(--bg-3);
-            border-color: var(--acc, var(--line-bright));
-            color: var(--acc, var(--text));
+        @media (hover: hover) {
+            button.btn:hover {
+                background: var(--bg-3);
+                border-color: var(--acc, var(--line-bright));
+                color: var(--acc, var(--text));
+            }
         }
 
         button.btn:active {
@@ -572,9 +580,11 @@
             font-weight: 700;
         }
 
-        button.btn.solid:hover {
-            filter: brightness(1.1);
-            color: #0a0a0a;
+        @media (hover: hover) {
+            button.btn.solid:hover {
+                filter: brightness(1.1);
+                color: #0a0a0a;
+            }
         }
 
         button.btn.toggle.on {
@@ -629,8 +639,10 @@
             transform: rotate(45deg) translate(-1px, -1px);
         }
 
-        .checkbox:hover {
-            color: var(--text);
+        @media (hover: hover) {
+            .checkbox:hover {
+                color: var(--text);
+            }
         }
 
         .divider {
@@ -647,7 +659,7 @@
             line-height: 1.5;
         }
 
-        /* ───────── FOOTER ───────── */
+        /* --------- FOOTER --------- */
         footer {
             height: 32px;
             border-top: 1px solid var(--line);
@@ -736,9 +748,11 @@
             position: relative;
         }
 
-        .dir-pad button:hover {
-            border-color: var(--red);
-            background: var(--bg-3);
+        @media (hover: hover) {
+            .dir-pad button:hover {
+                border-color: var(--red);
+                background: var(--bg-3);
+            }
         }
 
         .dir-pad button.active {
@@ -763,8 +777,8 @@
     <div class="brand">
         <div class="brand-mark"></div>
         <div class="brand-text">
-            lite-camera<span class="pro">·PRO</span>
-            <span class="brand-version">v1.0.0</span>
+            lite-camera<span class="pro">&#xB7;PRO</span>
+            <span class="brand-version" id="brand-version"></span>
         </div>
     </div>
 
@@ -791,16 +805,17 @@
         </div>
         <div class="stat">
             <span class="stat-label">Zoom</span>
-            <span class="stat-value purple" id="stat-zoom">1.000×</span>
+            <span class="stat-value purple" id="stat-zoom">1.000&#xD7;</span>
         </div>
     </div>
 
-    <button class="btn-director" id="btn-director">▶ Run Director</button>
+    <button class="btn-director" id="btn-director">&#x25B6; Run Director</button>
 </header>
 
 <main>
     <div class="canvas-wrap">
         <canvas id="game" width="900" height="600"></canvas>
+        <div class="click-marker" id="click-marker"></div>
         <div class="title-card" id="title-card">
             <div class="label" id="title-label">Chapter</div>
             <div class="title" id="title-title">Title</div>
@@ -810,11 +825,11 @@
 
     <aside class="controls">
 
-        <!-- ───── FOLLOW MODE ───── -->
+        <!-- ----- FOLLOW MODE ----- -->
         <section class="panel accent-cyan" data-panel="follow">
             <div class="panel-header">
                 <span class="panel-title">Follow Mode</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
                 <label class="field">
@@ -823,11 +838,11 @@
                         <span class="field-value" id="lbl-mode">SMOOTH</span>
                     </div>
                     <select id="ctrl-mode">
-                        <option value="0">SMOOTH — deadzone + lookahead</option>
-                        <option value="1">LOCK — snap to target</option>
-                        <option value="2">PREDICTIVE — velocity extrapolation</option>
-                        <option value="3">CUT — instant jump</option>
-                        <option value="4">HYBRID — smooth X, locked Y</option>
+                        <option value="0">SMOOTH &#x2014; deadzone + lookahead</option>
+                        <option value="1">LOCK &#x2014; snap to target</option>
+                        <option value="2">PREDICTIVE &#x2014; velocity extrapolation</option>
+                        <option value="3">CUT &#x2014; instant jump</option>
+                        <option value="4">HYBRID &#x2014; smooth X, locked Y</option>
                     </select>
                 </label>
 
@@ -875,11 +890,11 @@
             </div>
         </section>
 
-        <!-- ───── ZOOM ───── -->
+        <!-- ----- ZOOM ----- -->
         <section class="panel accent-purple" data-panel="zoom">
             <div class="panel-header">
                 <span class="panel-title">Zoom</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
                 <label class="field">
@@ -901,21 +916,21 @@
                 <div class="note">Click anywhere on canvas to zoomAt(point).</div>
 
                 <div class="row-grid-3">
-                    <button class="btn" data-zoom-preset="0.5">0.5×</button>
-                    <button class="btn" data-zoom-preset="1">1.0×</button>
-                    <button class="btn" data-zoom-preset="2">2.0×</button>
+                    <button class="btn" data-zoom-preset="0.5">0.5&#xD7;</button>
+                    <button class="btn" data-zoom-preset="1">1.0&#xD7;</button>
+                    <button class="btn" data-zoom-preset="2">2.0&#xD7;</button>
                 </div>
             </div>
         </section>
 
-        <!-- ───── SHAKE ───── -->
+        <!-- ----- SHAKE ----- -->
         <section class="panel accent-red" data-panel="shake">
             <div class="panel-header">
                 <span class="panel-title">Shake Engine</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
-                <div class="note">8 built-in presets · noise-based · layered up to 8 slots.</div>
+                <div class="note">8 built-in presets &#xB7; noise-based &#xB7; layered up to 8 slots.</div>
                 <div class="row-grid">
                     <button class="btn" data-preset="explosion">Explosion</button>
                     <button class="btn" data-preset="earthquake">Earthquake</button>
@@ -979,15 +994,15 @@
                         <span class="field-value" id="lbl-dir">omni</span>
                     </div>
                     <div class="dir-pad" id="dir-pad">
-                        <button data-dx="-1" data-dy="-1" title="↖"></button>
-                        <button data-dx="0" data-dy="-1" title="↑"></button>
-                        <button data-dx="1" data-dy="-1" title="↗"></button>
-                        <button data-dx="-1" data-dy="0" title="←"></button>
+                        <button data-dx="-1" data-dy="-1" title="&#x2196;"></button>
+                        <button data-dx="0" data-dy="-1" title="&#x2191;"></button>
+                        <button data-dx="1" data-dy="-1" title="&#x2197;"></button>
+                        <button data-dx="-1" data-dy="0" title="&#x2190;"></button>
                         <button data-dx="0" data-dy="0" title="omni" class="center active"></button>
-                        <button data-dx="1" data-dy="0" title="→"></button>
-                        <button data-dx="-1" data-dy="1" title="↙"></button>
-                        <button data-dx="0" data-dy="1" title="↓"></button>
-                        <button data-dx="1" data-dy="1" title="↘"></button>
+                        <button data-dx="1" data-dy="0" title="&#x2192;"></button>
+                        <button data-dx="-1" data-dy="1" title="&#x2199;"></button>
+                        <button data-dx="0" data-dy="1" title="&#x2193;"></button>
+                        <button data-dx="1" data-dy="1" title="&#x2198;"></button>
                     </div>
                 </div>
 
@@ -998,30 +1013,34 @@
             </div>
         </section>
 
-        <!-- ───── SEQUENCES ───── -->
+        <!-- ----- SEQUENCES ----- -->
         <section class="panel accent-purple" data-panel="seq">
             <div class="panel-header">
                 <span class="panel-title">Cinematic Sequences</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
-                <div class="note">Built-in presets · timeline-driven · zero-GC.</div>
+                <div class="note">Built-in presets &#xB7; timeline-driven &#xB7; zero-GC.</div>
                 <div class="row-grid">
                     <button class="btn" id="btn-seq-pan">Pan To Boss</button>
                     <button class="btn" id="btn-seq-zoom">Dramatic Zoom</button>
                     <button class="btn" id="btn-seq-boss">Boss Reveal</button>
                     <button class="btn" id="btn-seq-tour">Custom Tour</button>
                 </div>
-                <button class="btn" id="btn-seq-stop">Stop Sequence</button>
+                <div class="row-grid">
+                    <button class="btn toggle on" id="btn-blend">Blend: 0.30s</button>
+                    <button class="btn" id="btn-seq-stop">Stop Sequence</button>
+                </div>
+                <div class="note">blendOutTime is SECONDS: on completion the camera glides its position back over that window (0 = a hard cut). Stop is always a hard handoff and every button stays replayable.</div>
                 <div class="note" id="seq-status">Idle.</div>
             </div>
         </section>
 
-        <!-- ───── MULTI-TARGET ───── -->
+        <!-- ----- MULTI-TARGET ----- -->
         <section class="panel accent-green" data-panel="mt">
             <div class="panel-header">
                 <span class="panel-title">Multi-Target Framing</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
                 <button class="btn toggle" id="btn-mt-toggle">Track Player + Allies</button>
@@ -1061,11 +1080,11 @@
             </div>
         </section>
 
-        <!-- ───── BOUNDS ───── -->
+        <!-- ----- BOUNDS ----- -->
         <section class="panel accent-cyan" data-panel="bounds">
             <div class="panel-header">
                 <span class="panel-title">Smart Bounds</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
                 <label class="field">
@@ -1074,10 +1093,10 @@
                         <span class="field-value" id="lbl-bounds">HARD</span>
                     </div>
                     <select id="ctrl-bounds">
-                        <option value="0">HARD — instant clamp</option>
-                        <option value="1">SOFT — smoothstep deceleration</option>
-                        <option value="2">ELASTIC — overshoot &amp; spring</option>
-                        <option value="3">NONE — no enforcement</option>
+                        <option value="0">HARD &#x2014; instant clamp</option>
+                        <option value="1">SOFT &#x2014; smoothstep deceleration</option>
+                        <option value="2">ELASTIC &#x2014; overshoot &amp; spring</option>
+                        <option value="3">NONE &#x2014; no enforcement</option>
                     </select>
                 </label>
 
@@ -1099,34 +1118,34 @@
                 </div>
 
                 <button class="btn toggle" id="btn-bounds-rect">Custom Rect (arena)</button>
-                <div class="note">Custom rect creates a 1200×1000 bounded zone at world origin.</div>
+                <div class="note">Custom rect creates a 1200&#xD7;1000 bounded zone at world origin.</div>
             </div>
         </section>
 
-        <!-- ───── PARALLAX ───── -->
+        <!-- ----- PARALLAX ----- -->
         <section class="panel accent-green" data-panel="parallax">
             <div class="panel-header">
                 <span class="panel-title">Parallax Layers</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
                 <label class="checkbox"><input type="checkbox" id="cb-sky" checked><span class="box"></span>Stars
-                    (0.05×)</label>
+                    (0.05&#xD7;)</label>
                 <label class="checkbox"><input type="checkbox" id="cb-mountains" checked><span class="box"></span>Mountains
-                    (0.20×)</label>
+                    (0.20&#xD7;)</label>
                 <label class="checkbox"><input type="checkbox" id="cb-hills" checked><span class="box"></span>Hills
-                    (0.50×)</label>
-                <label class="checkbox"><input type="checkbox" id="cb-fog" checked><span class="box"></span>Fog (0.75×)</label>
+                    (0.50&#xD7;)</label>
+                <label class="checkbox"><input type="checkbox" id="cb-fog" checked><span class="box"></span>Fog (0.75&#xD7;)</label>
                 <label class="checkbox"><input type="checkbox" id="cb-fg" checked><span class="box"></span>Foreground
-                    dust (1.30×)</label>
+                    dust (1.30&#xD7;)</label>
             </div>
         </section>
 
-        <!-- ───── DEBUG ───── -->
+        <!-- ----- DEBUG ----- -->
         <section class="panel accent-amber" data-panel="debug">
             <div class="panel-header">
                 <span class="panel-title">Debug Overlay</span>
-                <span class="panel-chevron">▼</span>
+                <span class="panel-chevron">&#x25BC;</span>
             </div>
             <div class="panel-body">
                 <label class="checkbox"><input type="checkbox" id="cb-hud" checked><span class="box"></span>Show
@@ -1140,6 +1159,15 @@
                     <label class="checkbox"><input type="checkbox" id="cb-hud-seq" checked><span class="box"></span>Sequence</label>
                     <label class="checkbox"><input type="checkbox" id="cb-hud-pllx" checked><span class="box"></span>Parallax</label>
                 </div>
+                <div class="divider"></div>
+                <label class="field">
+                    <div class="field-row">
+                        <span>dt clamp (maxDt)</span>
+                        <span class="field-value" id="dt-maxdt">0.10s</span>
+                    </div>
+                </label>
+                <button class="btn" id="btn-dt-spike">Tab stall (dt=1.5s)</button>
+                <div class="note" id="dt-spike-out">A single update(1.5s) is clamped to maxDt so a backgrounded tab never teleports the camera.</div>
             </div>
         </section>
 
@@ -1151,6 +1179,8 @@
     <span class="hint"><kbd>Q</kbd>/<kbd>E</kbd> Zoom</span>
     <span class="hint"><kbd>Space</kbd> Boss reveal</span>
     <span class="hint"><kbd>Click</kbd> Zoom-at-point</span>
+    <span class="hint"><kbd>Tab stall</kbd> maxDt clamp</span>
+    <span class="hint"><kbd>Blend</kbd> blendOutTime 0/0.3s</span>
     <span class="hint-spacer"></span>
     <span class="tag">CANVAS 2D</span>
     <span class="tag">ZERO-GC</span>
@@ -1161,24 +1191,37 @@
 <script type="importmap">
 {
   "imports": {
-    "@zakkster/lite-lerp": "https://esm.sh/@zakkster/lite-lerp",
-    "@zakkster/lite-ease": "https://esm.sh/@zakkster/lite-ease",
-    "@zakkster/lite-noise": "https://esm.sh/@zakkster/lite-noise",
-    "@zakkster/lite-timeline": "https://esm.sh/@zakkster/lite-timeline",
-    "@zakkster/lite-random": "https://esm.sh/@zakkster/lite-random",
-    "@zakkster/lite-camera": "https://esm.sh/@zakkster/lite-camera"
+    "@zakkster/lite-camera": "../node_modules/@zakkster/lite-camera/CinematicCamera.js",
+    "@zakkster/lite-lerp": "../node_modules/@zakkster/lite-lerp/Lerp.js",
+    "@zakkster/lite-ease": "../node_modules/@zakkster/lite-ease/LiteEase.js",
+    "@zakkster/lite-noise": "../node_modules/@zakkster/lite-noise/Noise.js",
+    "@zakkster/lite-timeline": "../node_modules/@zakkster/lite-timeline/Timeline.js",
+    "@zakkster/lite-random": "../node_modules/@zakkster/lite-camera/node_modules/@zakkster/lite-random/Random.js",
+    "@zakkster/lite-ticker": "../node_modules/@zakkster/lite-timeline/node_modules/@zakkster/lite-ticker/Ticker.js"
   }
 }
 </script>
 
 <!-- 2. Main Module Script -->
 <script type="module">
-    import { CinematicCameraPro, FollowMode, BoundsType, drawDebugHUD, drawDebugWorld } from '../src/index.js';
+    import { CinematicCameraPro, FollowMode, BoundsType, drawDebugHUD, drawDebugWorld, listPresets, VERSION } from '../src/index.js';
     import { clamp } from '@zakkster/lite-lerp';
     import { easeOutExpo, easeInOutCubic } from '@zakkster/lite-ease';
-    import { Random } from '@zakkster/lite-random';
 
-    // ─── World setup ────────────────────────────────────────────────────────
+    // Deterministic PRNG (mulberry32) -- replaces the lite-random dependency for
+    // demo-side scene generation. Same seeds -> identical scene across reloads.
+    function mulberry32(seed) {
+        let a = seed >>> 0;
+        return function () {
+            a |= 0;
+            a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    // --- World setup --------------------------------------------------------
     const VIEW_W = 900, VIEW_H = 600;
     const WORLD_W = 3600, WORLD_H = 2400;
     const canvas = document.getElementById('game');
@@ -1201,7 +1244,7 @@
     camera.target[0] = camera.pos[0];
     camera.target[1] = camera.pos[1];
 
-    // ─── Scene state ────────────────────────────────────────────────────────
+    // --- Scene state --------------------------------------------------------
     const TRAIL_LEN = 8;
     const player = {
         x: playerStart.x, y: playerStart.y,
@@ -1218,6 +1261,9 @@
     const allyA = {x: playerStart.x - 240, y: playerStart.y, color: '#22d3ee', label: 'A'};
     const allyB = {x: playerStart.x + 240, y: playerStart.y, color: '#a78bfa', label: 'B'};
     const multiTargets = [player, allyA, allyB];
+    // Hoisted ally list -- reused by the per-frame draw and the drag handler so
+    // neither allocates a [allyA, allyB] literal on the hot path.
+    const ALLIES = [allyA, allyB];
 
     // Boss (hidden until reveal)
     const boss = {x: WORLD_W - 400, y: WORLD_H * 0.4, pulse: 0};
@@ -1278,30 +1324,30 @@
         ctx.globalAlpha = 1;
     }
 
-    // ─── Procedurally-generated background data ────────────────────────────
+    // --- Procedurally-generated background data ----------------------------
     // Pre-computed once. Drawn each frame via parallax layers.
     const stars = (() => {
-        const rng = new Random(42);
+        const rng = mulberry32(42);
         const arr = [];
         for (let i = 0; i < 320; i++) {
             arr.push({
-                x: rng.next() * WORLD_W * 1.5,
-                y: rng.next() * WORLD_H * 0.6,
-                r: 0.3 + rng.next() * 1.4,
-                tw: rng.next() * Math.PI * 2,
-                speed: 1 + rng.next() * 2,
+                x: rng() * WORLD_W * 1.5,
+                y: rng() * WORLD_H * 0.6,
+                r: 0.3 + rng() * 1.4,
+                tw: rng() * Math.PI * 2,
+                speed: 1 + rng() * 2,
             });
         }
         return arr;
     })();
 
     const mountains = (() => {
-        const rng = new Random(91);
+        const rng = mulberry32(91);
         const arr = [];
         let x = -200;
         while (x < WORLD_W + 400) {
-            const w = 240 + rng.next() * 360;
-            const h = 220 + rng.next() * 260;
+            const w = 240 + rng() * 360;
+            const h = 220 + rng() * 260;
             arr.push({x, w, h});
             x += w * 0.55;
         }
@@ -1309,12 +1355,12 @@
     })();
 
     const hills = (() => {
-        const rng = new Random(173);
+        const rng = mulberry32(173);
         const arr = [];
         let x = -200;
         while (x < WORLD_W + 400) {
-            const w = 320 + rng.next() * 280;
-            const h = 120 + rng.next() * 140;
+            const w = 320 + rng() * 280;
+            const h = 120 + rng() * 140;
             arr.push({x, w, h});
             x += w * 0.6;
         }
@@ -1322,34 +1368,34 @@
     })();
 
     const platforms = (() => {
-        const rng = new Random(11);
+        const rng = mulberry32(11);
         const arr = [
             {x: 0, y: WORLD_H - 80, w: WORLD_W, h: 80},
         ];
         for (let i = 0; i < 16; i++) {
-            const x = 200 + rng.next() * (WORLD_W - 400);
-            const y = WORLD_H * 0.3 + rng.next() * (WORLD_H * 0.5);
-            const w = 140 + rng.next() * 180;
+            const x = 200 + rng() * (WORLD_W - 400);
+            const y = WORLD_H * 0.3 + rng() * (WORLD_H * 0.5);
+            const w = 140 + rng() * 180;
             arr.push({x, y, w, h: 24});
         }
         return arr;
     })();
 
     const fgDust = (() => {
-        const rng = new Random(7);
+        const rng = mulberry32(7);
         const arr = [];
         for (let i = 0; i < 60; i++) {
             arr.push({
-                x: rng.next() * WORLD_W * 1.4,
-                y: rng.next() * WORLD_H,
-                r: 0.5 + rng.next() * 1.2,
-                phase: rng.next() * Math.PI * 2,
+                x: rng() * WORLD_W * 1.4,
+                y: rng() * WORLD_H,
+                r: 0.5 + rng() * 1.2,
+                phase: rng() * Math.PI * 2,
             });
         }
         return arr;
     })();
 
-    // ─── Cached Gradients (Zero GC Hot Path) ───────────────────────────────
+    // --- Cached Gradients (Zero GC Hot Path) -------------------------------
     const skyGrad = ctx.createLinearGradient(0, 0, 0, WORLD_H * 0.7);
     skyGrad.addColorStop(0, '#0a0e22');
     skyGrad.addColorStop(0.4, '#0f1635');
@@ -1361,7 +1407,7 @@
     fogGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.05)');
     fogGrad.addColorStop(1, 'rgba(167, 139, 250, 0.08)');
 
-    // ─── Scene rendering ───────────────────────────────────────────────────
+    // --- Scene rendering ---------------------------------------------------
     let sceneTime = 0;
 
     function drawStarsLayer(ctx) {
@@ -1447,7 +1493,7 @@
     }
 
     function drawWorld(ctx) {
-        // ── Ground / platforms ──
+        // -- Ground / platforms --
         for (let i = 0; i < platforms.length; i++) {
             const p = platforms[i];
             // Base
@@ -1463,7 +1509,7 @@
             }
         }
 
-        // ── Boss (if visible / pulsing) ──
+        // -- Boss (if visible / pulsing) --
         boss.pulse += 0.03;
         const bossPulse = 0.85 + Math.sin(boss.pulse) * 0.15;
         const bossSize = 56;
@@ -1514,13 +1560,14 @@
 
         // Boss label
         ctx.fillStyle = '#ef4444';
-        ctx.font = 'bold 11px "JetBrains Mono", monospace';
+        ctx.font = 'bold 11px ui-monospace, SFMono-Regular, Menlo, monospace';
         ctx.textAlign = 'center';
         ctx.fillText('BOSS', 0, bossSize + 24);
         ctx.restore();
 
-        // ── Allies ──
-        for (const ally of [allyA, allyB]) {
+        // -- Allies --
+        for (let ai = 0; ai < ALLIES.length; ai++) {
+            const ally = ALLIES[ai];
             ctx.save();
             ctx.translate(ally.x, ally.y);
             ctx.shadowBlur = 16;
@@ -1535,15 +1582,15 @@
             ctx.arc(0, -10, 8, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = ally.color;
-            ctx.font = 'bold 9px "JetBrains Mono", monospace';
+            ctx.font = 'bold 9px ui-monospace, SFMono-Regular, Menlo, monospace';
             ctx.textAlign = 'center';
             ctx.fillText(ally.label, 0, -7);
             ctx.restore();
         }
 
-        // ── Player trail ──
+        // -- Player trail --
         for (let i = 0; i < player.trailActive; i++) {
-            const idx = (player.trailHead - 1 - i + TRAIL_LEN) % TRAIL_LEN;
+            const idx = (player.trailHead - 1 - i + TRAIL_LEN) & (TRAIL_LEN - 1);
             const tx = player.trail[idx * 2];
             const ty = player.trail[idx * 2 + 1];
             const a = 1 - (i / player.trailActive);
@@ -1555,7 +1602,7 @@
         }
         ctx.globalAlpha = 1;
 
-        // ── Player ──
+        // -- Player --
         ctx.save();
         ctx.translate(player.x, player.y);
 
@@ -1590,43 +1637,118 @@
         drawParticles(ctx);
     }
 
-    // ─── Input & Click-zoom marker ─────────────────────────────────────────
+    // --- DOM cache: every handler/loop lookup is hoisted here, above the first
+    //     addEventListener. The law forbids getElementById in a hot body. ------
+    const $brandVersion = document.getElementById('brand-version');
+    const $statFps = document.getElementById('stat-fps');
+    const $statFrame = document.getElementById('stat-frame');
+    const $statShake = document.getElementById('stat-shake');
+    const $statParallax = document.getElementById('stat-parallax');
+    const $statMode = document.getElementById('stat-mode');
+    const $statZoom = document.getElementById('stat-zoom');
+    const $ctrlZoom = document.getElementById('ctrl-zoom');
+    const $ctrlZoomDur = document.getElementById('ctrl-zoomdur');
+    const $lblZoom = document.getElementById('lbl-zoom');
+    const $ctrlMode = document.getElementById('ctrl-mode');
+    const $lblMode = document.getElementById('lbl-mode');
+    const $ctrlBounds = document.getElementById('ctrl-bounds');
+    const $lblBounds = document.getElementById('lbl-bounds');
+    const $lblDir = document.getElementById('lbl-dir');
+    const $ctrlTrauma = document.getElementById('ctrl-trauma');
+    const $ctrlFreq = document.getElementById('ctrl-freq');
+    const $ctrlDecay = document.getElementById('ctrl-decay');
+    const $ctrlOffset = document.getElementById('ctrl-offset');
+    const $ctrlAngle = document.getElementById('ctrl-angle');
+    const $ctrlMtPad = document.getElementById('ctrl-mt-pad');
+    const $ctrlMtMin = document.getElementById('ctrl-mt-min');
+    const $ctrlMtMax = document.getElementById('ctrl-mt-max');
+    const $ctrlMtZs = document.getElementById('ctrl-mt-zs');
+    const $seqStatus = document.getElementById('seq-status');
+    const $btnDirector = document.getElementById('btn-director');
+    const $titleCard = document.getElementById('title-card');
+    const $titleLabel = document.getElementById('title-label');
+    const $titleTitle = document.getElementById('title-title');
+    const $titleDesc = document.getElementById('title-desc');
+    const $clickMarker = document.getElementById('click-marker');
+    const $dirPadBtns = document.querySelectorAll('#dir-pad button');
+    const $btnBlend = document.getElementById('btn-blend');
+    const $btnDtSpike = document.getElementById('btn-dt-spike');
+    const $dtMaxdt = document.getElementById('dt-maxdt');
+    const $dtSpikeOut = document.getElementById('dt-spike-out');
+
+    // Stamp the version once, from the library's own VERSION const (D-d).
+    $brandVersion.textContent = 'v' + VERSION;
+    // Show the live dt clamp (maxDt, seconds) once at init (D-f).
+    $dtMaxdt.textContent = camera.maxDt.toFixed(2) + 's';
+
+    // Frozen enum name tables, hoisted out of the change handlers.
+    const MODE_NAMES = Object.freeze(['SMOOTH', 'LOCK', 'PREDICTIVE', 'CUT', 'HYBRID']);
+    const BOUNDS_NAMES = Object.freeze(['HARD', 'SOFT', 'ELASTIC', 'NONE']);
+
+    // Blend-out window (seconds), read live at every createSequence call (D-g).
+    let blendOutSec = 0.3;
+
+    // Canvas rect cached at init; refreshed on resize + scroll only, never per
+    // pointer move -- getBoundingClientRect forces a synchronous layout.
+    let canvasRect = canvas.getBoundingClientRect();
+    function refreshCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
+    window.addEventListener('resize', refreshCanvasRect);
+    window.addEventListener('scroll', refreshCanvasRect, true);
+
+    // Preset validation (D-h): every data-preset button + every sequence/
+    // director literal must resolve against the shipped registry, or the demo
+    // throws a named error before the first frame. Cold path -- alloc is fine.
+    const VALID_PRESETS = listPresets();
+    const SEQ_PRESET_LITERALS = ['heavy_impact', 'impact', 'damage', 'explosion', 'rumble', 'recoil'];
+    document.querySelectorAll('[data-preset]').forEach((b) => {
+        if (VALID_PRESETS.indexOf(b.dataset.preset) === -1) {
+            throw new Error('demo: unknown shake preset ' + b.dataset.preset);
+        }
+    });
+    for (let i = 0; i < SEQ_PRESET_LITERALS.length; i++) {
+        if (VALID_PRESETS.indexOf(SEQ_PRESET_LITERALS[i]) === -1) {
+            throw new Error('demo: unknown shake preset ' + SEQ_PRESET_LITERALS[i]);
+        }
+    }
+
+    // --- Input & click-zoom marker -----------------------------------------
+    // One pre-appended marker node, positioned via CSS custom properties and
+    // retriggered by removing/re-adding the .ping class (no per-click alloc).
     canvas.addEventListener('click', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-        const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+        const sx = (e.clientX - canvasRect.left) * (canvas.width / canvasRect.width);
+        const sy = (e.clientY - canvasRect.top) * (canvas.height / canvasRect.height);
 
         camera.screenToWorld(sx, sy, tmpVec);
 
-        const dur = parseFloat(document.getElementById('ctrl-zoomdur').value);
-        const targetZoom = parseFloat(document.getElementById('ctrl-zoom').value);
+        const dur = parseFloat($ctrlZoomDur.value);
+        const targetZoom = parseFloat($ctrlZoom.value);
         camera.zoomAt(tmpVec.x, tmpVec.y, targetZoom, dur, easeOutExpo);
 
-        const m = document.createElement('div');
-        m.className = 'click-marker';
-        m.style.left = e.clientX - rect.left + 'px';
-        m.style.top = e.clientY - rect.top + 'px';
-        canvas.parentElement.appendChild(m);
-        setTimeout(() => m.remove(), 600);
+        $clickMarker.style.setProperty('--mx', (e.clientX - canvasRect.left) + 'px');
+        $clickMarker.style.setProperty('--my', (e.clientY - canvasRect.top) + 'px');
+        $clickMarker.classList.remove('ping');
+        void $clickMarker.offsetWidth; // force reflow so the animation restarts
+        $clickMarker.classList.add('ping');
     });
 
     const keys = {};
     window.addEventListener('keydown', e => {
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
-        keys[e.key.toLowerCase()] = true;
+        const k = e.key;
+        if (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight' || k === ' ') e.preventDefault();
+        keys[k.toLowerCase()] = true;
 
-        if (e.key === ' ') runBossReveal();
-        if (e.key.toLowerCase() === 'q') {
+        if (k === ' ') runBossReveal();
+        if (k.toLowerCase() === 'q') {
             const z = clamp(camera.zoom * 0.85, camera.minZoom, camera.maxZoom);
             camera.setZoom(z, 0.3, easeOutExpo);
-            document.getElementById('ctrl-zoom').value = z;
-            document.getElementById('lbl-zoom').textContent = z.toFixed(2);
+            $ctrlZoom.value = z;
+            $lblZoom.textContent = z.toFixed(2);
         }
-        if (e.key.toLowerCase() === 'e') {
+        if (k.toLowerCase() === 'e') {
             const z = clamp(camera.zoom * 1.18, camera.minZoom, camera.maxZoom);
             camera.setZoom(z, 0.3, easeOutExpo);
-            document.getElementById('ctrl-zoom').value = z;
-            document.getElementById('lbl-zoom').textContent = z.toFixed(2);
+            $ctrlZoom.value = z;
+            $lblZoom.textContent = z.toFixed(2);
         }
     });
 
@@ -1667,14 +1789,14 @@
         if (Math.abs(player.vx) + Math.abs(player.vy) > 80) {
             player.trail[player.trailHead * 2] = player.x;
             player.trail[player.trailHead * 2 + 1] = player.y;
-            player.trailHead = (player.trailHead + 1) % TRAIL_LEN;
+            player.trailHead = (player.trailHead + 1) & (TRAIL_LEN - 1);
             if (player.trailActive < TRAIL_LEN) player.trailActive++;
         } else if (player.trailActive > 0) {
             player.trailActive--;
         }
     }
 
-    // ─── Render ────────────────────────────────────────────────────────────
+    // --- Render ------------------------------------------------------------
     function render() {
         ctx.fillStyle = '#060814';
         ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -1699,14 +1821,15 @@
         if (uiState.showHud) drawDebugHUD(camera, ctx, uiState.hudConfig);
     }
 
-    // ─── Main loop ─────────────────────────────────────────────────────────
+    // --- Main loop ---------------------------------------------------------
     let lastTime = performance.now();
-    let fpsAccum = 0, fpsCount = 0, fpsValue = 60, frameMs = 16.6;
+    let fpsAccum = 0, fpsCount = 0, fpsValue = 60, frameMs = 16.6, frameCount = 0;
 
     function loop(now) {
         const dt = Math.min((now - lastTime) / 1000, 0.05);
         lastTime = now;
         sceneTime += dt;
+        frameCount++;
 
         updatePlayer(dt);
         updateParticles(dt);
@@ -1714,39 +1837,39 @@
 
         render();
 
-        const ms = (performance.now() - now);
         fpsAccum += dt;
         fpsCount++;
         if (fpsAccum >= 0.5) {
             fpsValue = Math.round(fpsCount / fpsAccum);
-            frameMs = (fpsAccum * 1000 / fpsCount).toFixed(1);
+            frameMs = fpsAccum * 1000 / fpsCount; // numeric; formatted in the mask
             fpsAccum = 0;
             fpsCount = 0;
-            updateHeaderStats();
         }
+
+        // Telemetry throttled to ~8Hz via a frame-counter mask -- all toFixed
+        // string work lives inside updateHeaderStats, never per frame.
+        if ((frameCount & 7) === 0) updateHeaderStats();
 
         requestAnimationFrame(loop);
     }
 
     requestAnimationFrame(loop);
 
-    // ─── Header stats ──────────────────────────────────────────────────────
+    // --- Header stats ------------------------------------------------------
     function updateHeaderStats() {
-        document.getElementById('stat-fps').textContent = fpsValue;
-        document.getElementById('stat-frame').textContent = frameMs + 'ms';
+        $statFps.textContent = fpsValue;
+        $statFrame.textContent = frameMs.toFixed(1) + 'ms';
         let activeShakes = 0;
         for (let i = 0; i < camera._shake.slotCount; i++) {
             if (camera._shake.slots[i].active) activeShakes++;
         }
-        document.getElementById('stat-shake').textContent = activeShakes + '/8';
-        document.getElementById('stat-parallax').textContent = camera._parallax.activeCount + '/16';
-        document.getElementById('stat-mode').textContent = FollowMode[camera.mode] || 'SMOOTH';
-        document.getElementById('stat-zoom').textContent = camera.zoom.toFixed(3) + '×';
+        $statShake.textContent = activeShakes + '/8';
+        $statParallax.textContent = camera._parallax.activeCount + '/16';
+        $statMode.textContent = FollowMode[camera.mode] || 'SMOOTH';
+        $statZoom.textContent = camera.zoom.toFixed(3) + '\u00D7';
     }
 
-    setInterval(updateHeaderStats, 100);
-
-    // ─── UI state & Interactions ───────────────────────────────────────────
+    // --- UI state & Interactions -------------------------------------------
     const uiState = {
         showHud: true,
         showWorldDebug: true,
@@ -1760,25 +1883,23 @@
         customDir: {x: 0, y: 0},
     };
 
-    // ─── Title card (Director mode) ───────────────────────────────────────
-    const titleCard = document.getElementById('title-card');
-    const titleLabel = document.getElementById('title-label');
-    const titleTitle = document.getElementById('title-title');
-    const titleDesc = document.getElementById('title-desc');
-
+    // --- Title card (Director mode) ---
     function showTitle(label, title, desc, ms = 2200) {
-        titleLabel.textContent = label;
-        titleTitle.textContent = title;
-        titleDesc.textContent = desc || '';
-        titleCard.classList.add('show');
-        setTimeout(() => titleCard.classList.remove('show'), ms);
+        $titleLabel.textContent = label;
+        $titleTitle.textContent = title;
+        $titleDesc.textContent = desc || '';
+        $titleCard.classList.add('show');
+        setTimeout(() => $titleCard.classList.remove('show'), ms);
     }
 
-    // ─── Sequence helpers ────────────────────────────────────────────────
+    // --- Sequence helpers ------------------------------------------------
+    // blendOutSec is read HERE, at each call, so the Blend toggle takes effect
+    // on the next sequence without a reload (D-g / owner note 5).
     function runBossReveal() {
         const seq = camera.createSequence({
+            blendOutTime: blendOutSec,
             onComplete: () => {
-                document.getElementById('seq-status').textContent = 'Idle.';
+                $seqStatus.textContent = 'Idle.';
             },
         });
         const startCenter = {
@@ -1791,33 +1912,38 @@
             .wait(900)
             .moveAndZoom(startCenter.x, startCenter.y, 1.0, 1000, {ease: easeInOutCubic});
         camera.playSequence(seq);
-        document.getElementById('seq-status').textContent = 'Playing: Boss Reveal';
+        $seqStatus.textContent = 'Playing: Boss Reveal';
     }
 
     function runPanToBoss() {
         const seq = camera.createSequence({
-            onComplete: () => document.getElementById('seq-status').textContent = 'Idle.'
+            blendOutTime: blendOutSec,
+            onComplete: () => $seqStatus.textContent = 'Idle.'
         });
         seq.moveTo(boss.x, boss.y, 1400, {ease: easeInOutCubic});
         camera.playSequence(seq);
-        document.getElementById('seq-status').textContent = 'Playing: Pan To Boss';
+        $seqStatus.textContent = 'Playing: Pan To Boss';
     }
 
     function runDramaticZoom() {
         const seq = camera.createSequence({
-            onComplete: () => document.getElementById('seq-status').textContent = 'Idle.'
+            blendOutTime: blendOutSec,
+            onComplete: () => $seqStatus.textContent = 'Idle.'
         });
         seq.moveAndZoom(boss.x, boss.y, 2.4, 900, {ease: easeOutExpo})
             .wait(400)
             .shake('impact');
         camera.playSequence(seq);
-        document.getElementById('seq-status').textContent = 'Playing: Dramatic Zoom';
+        $seqStatus.textContent = 'Playing: Dramatic Zoom';
     }
 
     function runCustomTour() {
-        const status = document.getElementById('seq-status');
-        const seq = camera.createSequence({onComplete: () => status.textContent = 'Idle.'});
-        seq.moveAndZoom(playerStart.x, playerStart.y, 1.0, 800)
+        const seq = camera.createSequence({
+            blendOutTime: blendOutSec,
+            onComplete: () => $seqStatus.textContent = 'Idle.'
+        });
+        // First step pinned to absolute timeline 0 -- a visible sync at t=0.
+        seq.moveAndZoom(playerStart.x, playerStart.y, 1.0, 800, { at: 0 })
             .moveAndZoom(allyA.x, allyA.y, 1.4, 900)
             .wait(300)
             .shake('damage')
@@ -1830,18 +1956,18 @@
             .wait(800)
             .moveAndZoom(playerStart.x, playerStart.y, 1.0, 1100, {ease: easeInOutCubic});
         camera.playSequence(seq);
-        status.textContent = 'Playing: Custom Tour';
+        $seqStatus.textContent = 'Playing: Custom Tour';
     }
 
-    // ─── DIRECTOR — automated showcase ────────────────────────────────
+    // --- DIRECTOR \u2014 automated showcase --------------------------------
     let directorTimer = null;
     let directorStops = [];
 
     function clearDirector() {
         directorStops.forEach(t => clearTimeout(t));
         directorStops = [];
-        document.getElementById('btn-director').classList.remove('playing');
-        document.getElementById('btn-director').textContent = '▶ Run Director';
+        $btnDirector.classList.remove('playing');
+        $btnDirector.textContent = '\u25B6 Run Director';
     }
 
     function schedule(delay, fn) {
@@ -1859,9 +1985,9 @@
             return;
         }
 
-        const btn = document.getElementById('btn-director');
+        const btn = $btnDirector;
         btn.classList.add('playing');
-        btn.textContent = '■ Stop Director';
+        btn.textContent = '\u25A0 Stop Director';
 
         let t = 0;
         const STEP = 3500;
@@ -1874,7 +2000,7 @@
 
         // 1. Smooth follow
         schedule(t, () => {
-            showTitle('CHAPTER 01', 'Smooth Follow', 'deadzone + lookahead · the default');
+            showTitle('CHAPTER 01', 'Smooth Follow', 'deadzone + lookahead \u00B7 the default');
             camera.setMode(FollowMode.SMOOTH);
             syncControls();
         });
@@ -1882,7 +2008,7 @@
 
         // 2. Predictive
         schedule(t, () => {
-            showTitle('CHAPTER 02', 'Predictive Mode', 'velocity extrapolation · racing & runners');
+            showTitle('CHAPTER 02', 'Predictive Mode', 'velocity extrapolation \u00B7 racing & runners');
             camera.setMode(FollowMode.PREDICTIVE);
             syncControls();
         });
@@ -1890,7 +2016,7 @@
 
         // 3. Hybrid
         schedule(t, () => {
-            showTitle('CHAPTER 03', 'Hybrid Mode', 'smooth X · locked Y · platformer standard');
+            showTitle('CHAPTER 03', 'Hybrid Mode', 'smooth X \u00B7 locked Y \u00B7 platformer standard');
             camera.setMode(FollowMode.HYBRID);
             syncControls();
         });
@@ -1898,7 +2024,7 @@
 
         // 4. Lock
         schedule(t, () => {
-            showTitle('CHAPTER 04', 'Lock Mode', 'instant snap · top-down shooters');
+            showTitle('CHAPTER 04', 'Lock Mode', 'instant snap \u00B7 top-down shooters');
             camera.setMode(FollowMode.LOCK);
             syncControls();
         });
@@ -1923,7 +2049,7 @@
         schedule(t, () => {
             camera.trackSingle();
             camera.setMode(FollowMode.SMOOTH);
-            showTitle('CHAPTER 06', 'Layered Shake', '8-slot pool · simplex noise · zero-GC');
+            showTitle('CHAPTER 06', 'Layered Shake', '8-slot pool \u00B7 simplex noise \u00B7 zero-GC');
             syncControls();
         });
         t += 1400;
@@ -1942,41 +2068,41 @@
 
         // 7. Bounds
         schedule(t, () => {
-            showTitle('CHAPTER 07', 'Smart Bounds', 'HARD · SOFT · ELASTIC · per-edge config');
+            showTitle('CHAPTER 07', 'Smart Bounds', 'HARD \u00B7 SOFT \u00B7 ELASTIC \u00B7 per-edge config');
             camera.setBoundsType(BoundsType.SOFT);
-            document.getElementById('ctrl-bounds').value = '1';
-            document.getElementById('lbl-bounds').textContent = 'SOFT';
+            $ctrlBounds.value = '1';
+            $lblBounds.textContent = 'SOFT';
         });
         t += STEP;
         schedule(t, () => {
             camera.setBoundsType(BoundsType.ELASTIC);
-            document.getElementById('ctrl-bounds').value = '2';
-            document.getElementById('lbl-bounds').textContent = 'ELASTIC';
+            $ctrlBounds.value = '2';
+            $lblBounds.textContent = 'ELASTIC';
         });
         t += 2400;
         schedule(t, () => {
             camera.setBoundsType(BoundsType.HARD);
-            document.getElementById('ctrl-bounds').value = '0';
-            document.getElementById('lbl-bounds').textContent = 'HARD';
+            $ctrlBounds.value = '0';
+            $lblBounds.textContent = 'HARD';
         });
 
         // 8. Boss reveal sequence
         schedule(t, () => {
-            showTitle('CHAPTER 08', 'Cinematic Sequence', 'timeline-driven · GSAP-style positioning', 2600);
+            showTitle('CHAPTER 08', 'Cinematic Sequence', 'timeline-driven \u00B7 GSAP-style positioning', 2600);
             runBossReveal();
         });
         t += 4500;
 
         // 9. Custom tour
         schedule(t, () => {
-            showTitle('CHAPTER 09', 'Composed Cinematic', 'pan · zoom · shake · synchronized', 2400);
+            showTitle('CHAPTER 09', 'Composed Cinematic', 'pan \u00B7 zoom \u00B7 shake \u00B7 synchronized', 2400);
             runCustomTour();
         });
         t += 7500;
 
         // 10. Finale
         schedule(t, () => {
-            showTitle('LITE-CAMERA·PRO', 'Production Ready', 'zero-GC · high performance', 3500);
+            showTitle('LITE-CAMERA\u00B7PRO', 'Production Ready', 'zero-GC \u00B7 high performance', 3500);
             camera.shakePreset('heavy_impact', 0.6);
             spawnParticles(player.x, player.y, 60, ['#fbbf24', '#22d3ee', '#a78bfa', '#ef4444']);
         });
@@ -1985,26 +2111,22 @@
         schedule(t, () => clearDirector());
     }
 
-    // ─── Sync UI controls to current camera state ───────────────────
+    // --- Sync UI controls to current camera state -------------------
     function syncControls() {
-        document.getElementById('ctrl-mode').value = camera.mode;
-        // Use enum lookup fallback for names
-        const names = ['SMOOTH', 'LOCK', 'PREDICTIVE', 'CUT', 'HYBRID'];
-        document.getElementById('lbl-mode').textContent = names[camera.mode];
+        $ctrlMode.value = camera.mode;
+        $lblMode.textContent = MODE_NAMES[camera.mode];
     }
 
-    // ─── UI WIRING ────────────────────────────────────────────────────────
+    // --- UI WIRING --------------------------------------------------------
     // Panel collapse
     document.querySelectorAll('.panel-header').forEach(h => {
         h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
     });
 
     // Follow mode
-    const ctrlMode = document.getElementById('ctrl-mode');
-    ctrlMode.addEventListener('change', e => {
+    $ctrlMode.addEventListener('change', e => {
         camera.setMode(parseInt(e.target.value));
-        const names = ['SMOOTH', 'LOCK', 'PREDICTIVE', 'CUT', 'HYBRID'];
-        document.getElementById('lbl-mode').textContent = names[camera.mode];
+        $lblMode.textContent = MODE_NAMES[camera.mode];
     });
 
     // Deadzone & lookahead sliders
@@ -2026,7 +2148,7 @@
 
     // Zoom
     bindSlider('ctrl-zoom', 'lbl-zoom', v => {
-        const dur = parseFloat(document.getElementById('ctrl-zoomdur').value);
+        const dur = parseFloat($ctrlZoomDur.value);
         camera.setZoom(v, dur, easeOutExpo);
     }, v => v.toFixed(2));
     bindSlider('ctrl-zoomdur', 'lbl-zoomdur', () => {}, v => v.toFixed(2));
@@ -2034,10 +2156,10 @@
     document.querySelectorAll('[data-zoom-preset]').forEach(b => {
         b.addEventListener('click', () => {
             const z = parseFloat(b.dataset.zoomPreset);
-            const dur = parseFloat(document.getElementById('ctrl-zoomdur').value);
+            const dur = parseFloat($ctrlZoomDur.value);
             camera.setZoom(z, dur, easeOutExpo);
-            document.getElementById('ctrl-zoom').value = z;
-            document.getElementById('lbl-zoom').textContent = z.toFixed(2);
+            $ctrlZoom.value = z;
+            $lblZoom.textContent = z.toFixed(2);
         });
     });
 
@@ -2057,23 +2179,23 @@
 
     document.querySelectorAll('#dir-pad button').forEach(b => {
         b.addEventListener('click', () => {
-            document.querySelectorAll('#dir-pad button').forEach(x => x.classList.remove('active'));
+            for (let i = 0; i < $dirPadBtns.length; i++) $dirPadBtns[i].classList.remove('active');
             b.classList.add('active');
             uiState.customDir.x = parseInt(b.dataset.dx);
             uiState.customDir.y = parseInt(b.dataset.dy);
             const lbl = uiState.customDir.x === 0 && uiState.customDir.y === 0
-                ? 'omni' : `${uiState.customDir.x}, ${uiState.customDir.y}`;
-            document.getElementById('lbl-dir').textContent = lbl;
+                ? 'omni' : uiState.customDir.x + ', ' + uiState.customDir.y;
+            $lblDir.textContent = lbl;
         });
     });
 
     document.getElementById('btn-fire-custom').addEventListener('click', () => {
         camera.shake({
-            trauma: parseFloat(document.getElementById('ctrl-trauma').value),
-            freq: parseInt(document.getElementById('ctrl-freq').value),
-            decay: parseFloat(document.getElementById('ctrl-decay').value),
-            maxOffset: parseInt(document.getElementById('ctrl-offset').value),
-            maxAngle: parseFloat(document.getElementById('ctrl-angle').value),
+            trauma: parseFloat($ctrlTrauma.value),
+            freq: parseInt($ctrlFreq.value),
+            decay: parseFloat($ctrlDecay.value),
+            maxOffset: parseInt($ctrlOffset.value),
+            maxAngle: parseFloat($ctrlAngle.value),
             dirX: uiState.customDir.x,
             dirY: uiState.customDir.y,
         });
@@ -2089,8 +2211,20 @@
     document.getElementById('btn-seq-tour').addEventListener('click', runCustomTour);
     document.getElementById('btn-seq-stop').addEventListener('click', () => {
         camera.stopSequence();
-        document.getElementById('seq-status').textContent = 'Idle.';
+        $seqStatus.textContent = 'Stopped (hard handoff)';
     });
+
+    // Blend-out toggle (D-g): flips blendOutSec 0 <-> 0.3 seconds; the value is
+    // read live at the next createSequence call, so the change is immediate.
+    function refreshBlendLabel() {
+        $btnBlend.textContent = 'Blend: ' + blendOutSec.toFixed(2) + 's';
+        $btnBlend.classList.toggle('on', blendOutSec > 0);
+    }
+    $btnBlend.addEventListener('click', () => {
+        blendOutSec = blendOutSec > 0 ? 0 : 0.3;
+        refreshBlendLabel();
+    });
+    refreshBlendLabel();
 
     // Multi-target
     const btnMt = document.getElementById('btn-mt-toggle');
@@ -2100,11 +2234,11 @@
             btnMt.classList.remove('on');
         } else {
             camera.trackMultiple(multiTargets, {
-                paddingX: parseInt(document.getElementById('ctrl-mt-pad').value),
-                paddingY: parseInt(document.getElementById('ctrl-mt-pad').value),
-                minZoom: parseFloat(document.getElementById('ctrl-mt-min').value),
-                maxZoom: parseFloat(document.getElementById('ctrl-mt-max').value),
-                zoomSpeed: parseFloat(document.getElementById('ctrl-mt-zs').value),
+                paddingX: parseInt($ctrlMtPad.value),
+                paddingY: parseInt($ctrlMtPad.value),
+                minZoom: parseFloat($ctrlMtMin.value),
+                maxZoom: parseFloat($ctrlMtMax.value),
+                zoomSpeed: parseFloat($ctrlMtZs.value),
             });
             btnMt.classList.add('on');
         }
@@ -2118,44 +2252,47 @@
     bindSlider('ctrl-mt-min', 'lbl-mt-min', v => camera._mt.minZoom = v, v => v.toFixed(2));
     bindSlider('ctrl-mt-max', 'lbl-mt-max', v => camera._mt.maxZoom = v, v => v.toFixed(2));
 
-    // Drag allies (simple grab)
+    // Drag allies (pointer events + capture, works with mouse and touch). The
+    // canvas rect is the cached one -- no getBoundingClientRect per move.
     let dragging = null;
-    canvas.addEventListener('mousedown', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-        const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    canvas.addEventListener('pointerdown', (e) => {
+        const sx = (e.clientX - canvasRect.left) * (canvas.width / canvasRect.width);
+        const sy = (e.clientY - canvasRect.top) * (canvas.height / canvasRect.height);
 
         camera.screenToWorld(sx, sy, tmpVec);
 
-        for (const a of [allyA, allyB]) {
+        for (let i = 0; i < ALLIES.length; i++) {
+            const a = ALLIES[i];
             const dx = tmpVec.x - a.x, dy = tmpVec.y - a.y;
             if (dx * dx + dy * dy < 30 * 30) {
                 dragging = a;
+                canvas.setPointerCapture(e.pointerId);
                 e.stopPropagation();
                 break;
             }
         }
     });
-    canvas.addEventListener('mousemove', (e) => {
+    canvas.addEventListener('pointermove', (e) => {
         if (!dragging) return;
-        const rect = canvas.getBoundingClientRect();
-        const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-        const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+        const sx = (e.clientX - canvasRect.left) * (canvas.width / canvasRect.width);
+        const sy = (e.clientY - canvasRect.top) * (canvas.height / canvasRect.height);
 
         camera.screenToWorld(sx, sy, tmpVec);
         dragging.x = tmpVec.x;
         dragging.y = tmpVec.y;
     });
-    window.addEventListener('mouseup', () => {
+    canvas.addEventListener('pointerup', (e) => {
+        if (dragging && canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
         dragging = null;
     });
+    // Cancelled gesture (UA auto-releases capture) must not leave a drag latched
+    canvas.addEventListener('pointercancel', () => { dragging = null; });
 
     // Bounds
-    document.getElementById('ctrl-bounds').addEventListener('change', e => {
+    $ctrlBounds.addEventListener('change', e => {
         const t = parseInt(e.target.value);
         camera.setBoundsType(t);
-        const names = ['HARD', 'SOFT', 'ELASTIC', 'NONE'];
-        document.getElementById('lbl-bounds').textContent = names[t];
+        $lblBounds.textContent = BOUNDS_NAMES[t];
     });
     bindSlider('ctrl-softzone', 'lbl-softzone', v => camera._bounds.softZone = v);
     bindSlider('ctrl-elastic', 'lbl-elastic', v => camera._bounds.elasticMax = v);
@@ -2195,11 +2332,41 @@
     document.getElementById('cb-hud-pllx').addEventListener('change', e => uiState.hudConfig.show.parallax = e.target.checked);
 
     // Director
-    document.getElementById('btn-director').addEventListener('click', runDirector);
+    $btnDirector.addEventListener('click', runDirector);
+
+    // dt-spike control (D-f): fire one out-of-rAF update(1.5s) and report how far
+    // the camera actually moved -- proof that update() clamps dt to maxDt. The
+    // previous position is sampled into two pre-allocated scalars (no alloc).
+    let dtSpikePrevX = 0, dtSpikePrevY = 0;
+    $btnDtSpike.addEventListener('click', () => {
+        dtSpikePrevX = camera.pos[0];
+        dtSpikePrevY = camera.pos[1];
+        camera.update(1.5, player.x, player.y, player.vx, player.vy);
+        const moved = Math.round(Math.hypot(camera.pos[0] - dtSpikePrevX, camera.pos[1] - dtSpikePrevY));
+        $dtSpikeOut.textContent = 'clamped to maxDt -- moved ' + moved + 'px';
+    });
 
     // Initial sync
     syncControls();
     updateHeaderStats();
+
+    // Optional layout profiler (D-i): only when the URL carries #profile. A
+    // normal load makes ZERO network requests; offline #profile logs one warning
+    // and the demo keeps running. Never referenced from the frame loop.
+    if (location.hash === '#profile') {
+        import('https://esm.sh/@zakkster/lite-layout-profiler')
+            .then((m) => {
+                const create = m.createLayoutProfiler || (m.default && m.default.createLayoutProfiler);
+                if (typeof create !== 'function') {
+                    console.warn('demo: layout profiler API missing -- running without it');
+                    return;
+                }
+                // Read window.__layout.summary() in DevTools after driving the page
+                window.__layout = create({ warnToConsole: true });
+                window.addEventListener('beforeunload', () => window.__layout.destroy(), { once: true });
+            })
+            .catch(() => console.warn('demo: layout profiler unavailable (offline) -- running without it'));
+    }
 </script>
 
 </body>

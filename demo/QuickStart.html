@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>lite-camera-pro · Interactive Tour</title>
+    <title>lite-camera-pro &#xB7; Interactive Tour</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;800&display=swap');
+        :root {
+            --display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        }
 
         * {
             margin: 0;
@@ -16,9 +19,9 @@
         body {
             background: #0a0a0f;
             color: #e2e0d8;
-            font-family: 'Outfit', sans-serif;
+            font-family: var(--display);
             display: flex;
-            height: 100vh;
+            height: 100dvh;
             overflow: hidden;
         }
 
@@ -45,7 +48,7 @@
         header p {
             font-size: 0.75rem;
             color: #6b7280;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: var(--mono);
             margin-bottom: 24px;
         }
 
@@ -64,7 +67,7 @@
             padding: 12px 16px;
             border-radius: 6px;
             cursor: pointer;
-            font-family: 'Outfit', sans-serif;
+            font-family: var(--display);
             font-size: 0.9rem;
             font-weight: 600;
             transition: all 0.2s;
@@ -72,9 +75,11 @@
             overflow: hidden;
         }
 
-        .scenario-btn:hover {
-            border-color: #fbbf24;
-            color: #d4d0c8;
+        @media (hover: hover) {
+            .scenario-btn:hover {
+                border-color: #fbbf24;
+                color: #d4d0c8;
+            }
         }
 
         .scenario-btn.active {
@@ -101,6 +106,10 @@
             font-size: 0.95rem;
         }
 
+        #desc-body {
+            white-space: pre-line;
+        }
+
         /* Action Buttons specific to scenarios */
         #action-container {
             margin-top: 12px;
@@ -115,14 +124,16 @@
             border: none;
             padding: 6px 12px;
             border-radius: 4px;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: var(--mono);
             font-size: 0.7rem;
             cursor: pointer;
         }
 
-        .action-btn:hover {
-            background: #fbbf24;
-            color: #0a0a0f;
+        @media (hover: hover) {
+            .action-btn:hover {
+                background: #fbbf24;
+                color: #0a0a0f;
+            }
         }
 
         /* Main Canvas Area */
@@ -146,7 +157,7 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 8px 16px;
             border-radius: 20px;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: var(--mono);
             font-size: 0.75rem;
             color: #fbbf24;
             pointer-events: none;
@@ -158,13 +169,16 @@
 <div id="sidebar">
     <header>
         <h1>lite-camera-pro</h1>
-        <p>Interactive Cookbook Tour</p>
+        <p>Interactive Cookbook Tour <span id="version-stamp"></span></p>
     </header>
 
     <div class="scenario-list" id="scenario-list">
     </div>
 
     <div class="scenario-desc" id="scenario-desc">
+        <strong id="desc-head"></strong>
+        <p id="desc-body"></p>
+        <div id="action-container"></div>
     </div>
 </div>
 
@@ -173,12 +187,29 @@
     <div class="overlay-hint">WASD to move</div>
 </div>
 
-<script type="module">
-    import {CinematicCameraPro, FollowMode, BoundsType} from './index.js';
+<!-- Import map: 7 local entries (identical to CameraProModule.html). The two
+     transitive specifiers (lite-random, lite-ticker) are what keep the page
+     alive offline -- a browser importmap does no node resolution. -->
+<script type="importmap">
+{
+  "imports": {
+    "@zakkster/lite-camera": "../node_modules/@zakkster/lite-camera/CinematicCamera.js",
+    "@zakkster/lite-lerp": "../node_modules/@zakkster/lite-lerp/Lerp.js",
+    "@zakkster/lite-ease": "../node_modules/@zakkster/lite-ease/LiteEase.js",
+    "@zakkster/lite-noise": "../node_modules/@zakkster/lite-noise/Noise.js",
+    "@zakkster/lite-timeline": "../node_modules/@zakkster/lite-timeline/Timeline.js",
+    "@zakkster/lite-random": "../node_modules/@zakkster/lite-camera/node_modules/@zakkster/lite-random/Random.js",
+    "@zakkster/lite-ticker": "../node_modules/@zakkster/lite-timeline/node_modules/@zakkster/lite-ticker/Ticker.js"
+  }
+}
+</script>
 
-    // ─────────────────────────────────────────────────────────
+<script type="module">
+    import {CinematicCameraPro, FollowMode, BoundsType, VERSION} from '../src/index.js';
+
+    // ---------------------------------------------------------
     //  ENGINE SETUP
-    // ─────────────────────────────────────────────────────────
+    // ---------------------------------------------------------
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
@@ -209,15 +240,16 @@
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-    // ─────────────────────────────────────────────────────────
+    // ---------------------------------------------------------
     //  SCENARIO DEFINITIONS (The Cookbook Tour)
-    // ─────────────────────────────────────────────────────────
+    // ---------------------------------------------------------
 
     const scenarios = [
         {
             id: 'smooth',
-            title: '02 — Smooth Follow',
-            desc: '<strong>The Default Glide</strong><br>The camera uses a deadzone and lookahead to smoothly follow the player. Notice how small movements don\'t jerk the camera around.',
+            title: '02 \u2014 Smooth Follow',
+            head: 'The Default Glide',
+            body: 'The camera uses a deadzone and lookahead to smoothly follow the player. Notice how small movements don\'t jerk the camera around.',
             setup: () => {
                 cam.setMode(FollowMode.SMOOTH);
                 cam.deadzoneX = 60;
@@ -232,8 +264,9 @@
         },
         {
             id: 'lock',
-            title: '04 — Twin-Stick Lock',
-            desc: '<strong>Zero Lag Precision</strong><br>The camera locks instantly to the player. No smoothing, no deadzone. Perfect for top-down shooters where aim is critical.<br><br><em>Click anywhere to fire and see directional recoil.</em>',
+            title: '04 \u2014 Twin-Stick Lock',
+            head: 'Zero Lag Precision',
+            body: 'The camera locks instantly to the player. No smoothing, no deadzone. Perfect for top-down shooters where aim is critical.\n\nClick anywhere to fire and see directional recoil.',
             setup: () => {
                 cam.setMode(FollowMode.LOCK);
                 cam.setZoom(1.2, 0.5);
@@ -251,8 +284,9 @@
         },
         {
             id: 'hybrid',
-            title: '03 — Platformer Hybrid',
-            desc: '<strong>Solid Vertical, Smooth Horizontal</strong><br>Horizontal movement is smoothed, but vertical movement locks tightly to the player. Prevents the camera from "swimming" during jumps.',
+            title: '03 \u2014 Platformer Hybrid',
+            head: 'Solid Vertical, Smooth Horizontal',
+            body: 'Horizontal movement is smoothed, but vertical movement locks tightly to the player. Prevents the camera from "swimming" during jumps.',
             setup: () => {
                 cam.setMode(FollowMode.HYBRID);
                 cam.hybridVerticalSnap = true;
@@ -264,8 +298,9 @@
         },
         {
             id: 'bounds',
-            title: '16 — Soft Edge Bounds',
-            desc: '<strong>Graceful Deceleration</strong><br>Walk to the edge of the world. Instead of hitting a brick wall, the camera smoothly decelerates using a custom soft zone.',
+            title: '16 \u2014 Soft Edge Bounds',
+            head: 'Graceful Deceleration',
+            body: 'Walk to the edge of the world. Instead of hitting a brick wall, the camera smoothly decelerates using a custom soft zone.',
             setup: () => {
                 cam.setMode(FollowMode.SMOOTH);
                 cam.setBoundsType(BoundsType.SOFT);
@@ -278,8 +313,9 @@
         },
         {
             id: 'parallax',
-            title: '19 — Deep Parallax',
-            desc: '<strong>Instant Depth</strong><br>We\'ve registered 3 parallax layers (sky, mountains, foreground). Move around to see them scroll at different multipliers relative to the camera.',
+            title: '19 \u2014 Deep Parallax',
+            head: 'Instant Depth',
+            body: 'We\'ve registered 3 parallax layers (sky, mountains, foreground). Move around to see them scroll at different multipliers relative to the camera.',
             setup: () => {
                 cam.setMode(FollowMode.SMOOTH);
                 cam.addParallaxLayer('sky', 0.05);
@@ -294,8 +330,9 @@
         },
         {
             id: 'multitarget',
-            title: '15 — Co-op Framing',
-            desc: '<strong>Auto-Zoom Bounding Box</strong><br>An ally has spawned. The camera abandons follow mode and automatically manages position and zoom to keep both targets perfectly framed.',
+            title: '15 \u2014 Co-op Framing',
+            head: 'Auto-Zoom Bounding Box',
+            body: 'An ally has spawned. The camera abandons follow mode and automatically manages position and zoom to keep both targets perfectly framed.',
             setup: () => {
                 ally.active = true;
                 ally.x = player.x + 100;
@@ -310,8 +347,9 @@
         },
         {
             id: 'sequence',
-            title: '12 — Boss Reveal Sequence',
-            desc: '<strong>Cinematic Timeline Control</strong><br>Click the button below to hand control over to a pre-choreographed timeline sequence. It pans, zooms, shakes, and returns.',
+            title: '12 \u2014 Boss Reveal Sequence',
+            head: 'Cinematic Timeline Control',
+            body: 'Click the button below to hand control over to a pre-choreographed timeline sequence. It pans, zooms, shakes, and returns.',
             setup: () => {
                 cam.setMode(FollowMode.SMOOTH);
                 renderActions([
@@ -335,12 +373,28 @@
 
     let currentScenarioIndex = -1;
 
-    // ─────────────────────────────────────────────────────────
+    // ---------------------------------------------------------
     //  UI CONTROLLER
-    // ─────────────────────────────────────────────────────────
+    // ---------------------------------------------------------
 
-    const listEl = document.getElementById('scenario-list');
-    const descEl = document.getElementById('scenario-desc');
+    // DOM cache (all lookups hoisted to init; none inside a handler or loop).
+    const $list = document.getElementById('scenario-list');
+    const $descHead = document.getElementById('desc-head');
+    const $descBody = document.getElementById('desc-body');
+    const $actions = document.getElementById('action-container');
+    const $version = document.getElementById('version-stamp');
+
+    // Stamp the version once, from the library's own VERSION const (D-d).
+    $version.textContent = 'v' + VERSION;
+
+    // Pre-allocated out-vector for screenToWorld -- no {x, y} literal per click.
+    const tmpVec = {x: 0, y: 0};
+
+    // Canvas rect cached at init; refreshed on resize + scroll, never per click.
+    let canvasRect = canvas.getBoundingClientRect();
+    function refreshCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
+    window.addEventListener('resize', refreshCanvasRect);
+    window.addEventListener('scroll', refreshCanvasRect, true);
 
     function loadScenario(index) {
         if (currentScenarioIndex >= 0) {
@@ -350,53 +404,57 @@
         currentScenarioIndex = index;
         const s = scenarios[index];
 
-        // Update UI
-        document.querySelectorAll('.scenario-btn').forEach((btn, i) => {
-            btn.classList.toggle('active', i === index);
-        });
+        for (let i = 0; i < scenarioBtns.length; i++) {
+            scenarioBtns[i].classList.toggle('active', i === index);
+        }
 
-        descEl.innerHTML = s.desc + '<div id="action-container"></div>';
+        // Persistent nodes updated by textContent; the action row is cleared
+        // with replaceChildren() -- no markup strings, no per-switch re-lookup.
+        $descHead.textContent = s.head;
+        $descBody.textContent = s.body;
+        $actions.replaceChildren();
 
-        // Run setup
         s.setup();
     }
 
     function renderActions(actions) {
-        const container = document.getElementById('action-container');
-        if (!container) return;
-        actions.forEach(a => {
+        $actions.replaceChildren();
+        for (let i = 0; i < actions.length; i++) {
+            const a = actions[i];
             const btn = document.createElement('button');
             btn.className = 'action-btn';
-            btn.innerText = a.label;
-            btn.onclick = (e) => {
+            btn.textContent = a.label;
+            btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 a.action();
-            };
-            container.appendChild(btn);
-        });
+            });
+            $actions.appendChild(btn);
+        }
     }
 
     // Build sidebar
-    scenarios.forEach((s, i) => {
+    const scenarioBtns = [];
+    for (let i = 0; i < scenarios.length; i++) {
         const btn = document.createElement('button');
         btn.className = 'scenario-btn';
-        btn.innerText = s.title;
-        btn.onclick = () => loadScenario(i);
-        listEl.appendChild(btn);
-    });
+        btn.textContent = scenarios[i].title;
+        const idx = i;
+        btn.addEventListener('click', () => loadScenario(idx));
+        $list.appendChild(btn);
+        scenarioBtns.push(btn);
+    }
 
-    // Handle Clicks
-    canvas.addEventListener('mousedown', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const pt = cam.screenToWorld(e.clientX - rect.left, e.clientY - rect.top, {x: 0, y: 0});
-
+    // Handle canvas clicks (pointer events; screenToWorld reads the cached rect
+    // and writes into the shared tmpVec, so nothing allocates per click).
+    canvas.addEventListener('pointerdown', (e) => {
+        cam.screenToWorld(e.clientX - canvasRect.left, e.clientY - canvasRect.top, tmpVec);
         const s = scenarios[currentScenarioIndex];
-        if (s.onClick) s.onClick(pt.x, pt.y);
+        if (s.onClick) s.onClick(tmpVec.x, tmpVec.y);
     });
 
-    // ─────────────────────────────────────────────────────────
+    // ---------------------------------------------------------
     //  RENDERING & GAME LOOP
-    // ─────────────────────────────────────────────────────────
+    // ---------------------------------------------------------
 
     // Dummy landmarks for visual reference
     const landmarks = Array.from({length: 40}, (_, i) => ({
@@ -429,15 +487,16 @@
         ctx.lineWidth = 2;
         ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
 
-        // Landmarks
+        // Landmarks (indexed for -- no per-frame iterator/closure allocation)
         ctx.fillStyle = 'rgba(167, 139, 250, 0.2)';
         ctx.strokeStyle = 'rgba(167, 139, 250, 0.5)';
-        landmarks.forEach(l => {
+        for (let i = 0; i < landmarks.length; i++) {
+            const l = landmarks[i];
             ctx.beginPath();
             ctx.arc(l.x, l.y, l.r, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
-        });
+        }
 
         // Boss
         ctx.fillStyle = '#ef4444';
@@ -445,7 +504,7 @@
         ctx.arc(boss.x, boss.y, boss.size, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.font = '12px monospace';
+        ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
         ctx.fillText('BOSS', boss.x - 14, boss.y - boss.size - 8);
 
         // Ally
@@ -550,6 +609,24 @@
     // Start Tour
     loadScenario(0);
     requestAnimationFrame(loop);
+
+    // Optional layout profiler (D-i): only when the URL carries #profile. A
+    // normal load makes ZERO network requests; offline #profile logs one warning
+    // and the demo keeps running. Never referenced from the frame loop.
+    if (location.hash === '#profile') {
+        import('https://esm.sh/@zakkster/lite-layout-profiler')
+            .then((m) => {
+                const create = m.createLayoutProfiler || (m.default && m.default.createLayoutProfiler);
+                if (typeof create !== 'function') {
+                    console.warn('demo: layout profiler API missing -- running without it');
+                    return;
+                }
+                // Read window.__layout.summary() in DevTools after driving the page
+                window.__layout = create({ warnToConsole: true });
+                window.addEventListener('beforeunload', () => window.__layout.destroy(), { once: true });
+            })
+            .catch(() => console.warn('demo: layout profiler unavailable (offline) -- running without it'));
+    }
 
 </script>
 </body>
