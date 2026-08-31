@@ -11,8 +11,9 @@
 
 import { CinematicCameraPro } from '../../src/index.js';
 import {
-    createShakeState, addShake, addTraumaSimple, updateShake, computeShake, getPreset,
+    createShakeState, addShake, addTraumaSimple, updateShake, computeShake,
 } from '../../src/index.js';
+import { getPreset } from '../../src/ShakePresets.js'; // v2.0.0: presets moved to ./shake
 import { check } from './harness.mjs';
 
 /** Full observable pose. A rejected door must leave every field byte-identical. */
@@ -104,11 +105,14 @@ export async function run() {
         expectThrowNoop(cam, (c) => c.setState({ zoom: NaN }), 'ERR_CAMERA_STATE', 'T1.CP-12c setState zoom NaN');
     }
 
-    // --- CP-12d: shakePreset(undefined) is a no-op returning this ----------
+    // --- CP-12d (v2.0.0): shakePreset dropped; getPreset-guard idiom no-op ---
     {
         const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
-        check(cam.shakePreset(undefined) === cam, () => 'T1.CP-12d: shakePreset(undefined) must return this');
-        check(cam._shake.active === false, () => 'T1.CP-12d: shakePreset(undefined) must activate nothing');
+        check(typeof cam.shakePreset === 'undefined', () => 'T1.CP-12d: shakePreset must be removed (no tombstone)');
+        // Migration idiom preserves the no-op: null preset -> no shake fires.
+        const p = getPreset(undefined);
+        if (p) cam.shake(p);
+        check(cam._shake.active === false, () => 'T1.CP-12d: the getPreset-guard idiom must activate nothing');
         check(getPreset(42) === null, () => 'T1.CP-12d: getPreset(42) must be null');
         check(getPreset(undefined) === null, () => 'T1.CP-12d: getPreset(undefined) must be null');
         check(getPreset('nope') === null, () => 'T1.CP-12d: getPreset(unknown) must be null');

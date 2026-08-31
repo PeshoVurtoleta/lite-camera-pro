@@ -92,7 +92,9 @@ export function drawDebugHUD(cam, ctx, config) {
 
     if (show.sequence && cam._seq && cam._seq.playing) lineCount += 1;
 
-    if (show.parallax && cam._parallax.activeCount > 0) {
+    // CP-22: _parallax is null until withParallax attaches. withDebug alone must
+    // not crash the HUD -- null skips the parallax panel (same as activeCount 0).
+    if (show.parallax && cam._parallax !== null && cam._parallax.activeCount > 0) {
         lineCount += 1;
         for (let i = 0; i < cam._parallax.layerCount; i++) {
             if (cam._parallax.layers[i].active) lineCount++;
@@ -189,7 +191,8 @@ export function drawDebugHUD(cam, ctx, config) {
         row++;
     }
 
-    if (show.parallax && cam._parallax.activeCount > 0) {
+    // CP-22: null _parallax (withDebug without withParallax) skips the panel.
+    if (show.parallax && cam._parallax !== null && cam._parallax.activeCount > 0) {
         ctx.fillStyle = COL_GREEN;
         ctx.fillText(`parallax ${cam._parallax.activeCount} layers`, textX, baseY + row * LINE_H);
         row++;
@@ -285,6 +288,42 @@ export function drawDebugWorld(cam, ctx, config) {
     ctx.strokeRect(0, 0, cam.worldW, cam.worldH);
 
     ctx.restore();
+}
+
+/**
+ * Attach the debug subsystem to one camera (v2.0.0 detach, CP-22/D1).
+ * The class ships debug()/debugHUD() as fail-closed stubs; this restores the
+ * real behavior per-instance -- own-property install only, never prototype
+ * mutation -- and builds the DebugHUDConfig the constructor no longer
+ * allocates. Single-shot: a second attach throws ERR_ALREADY_ATTACHED.
+ * destroy() is the only exit (it rebinds these to its sentinel).
+ *
+ * @param {Object} cam  A CinematicCameraPro instance
+ * @returns {Object} cam, for chaining
+ * @throws {Error} code "ERR_ALREADY_ATTACHED" if debug is already attached
+ */
+export function withDebug(cam) {
+    // Destroyed beats unattached (QA-1): a corpse is Object.hasOwn(cam, 'update')
+    // (destroy() rebinds update as an own-property). Fail closed before attaching.
+    if (Object.hasOwn(cam, 'update')) {
+        const e = new Error("CinematicCameraPro: use after destroy()");
+        e.code = "ERR_CAMERA_DESTROYED";
+        throw e;
+    }
+    if (cam.debugConfig !== null) {
+        const e = new Error("CinematicCameraPro: debug already attached. " +
+            "withDebug(camera) is per-instance and single-shot.");
+        e.code = "ERR_ALREADY_ATTACHED";
+        throw e;
+    }
+    cam.debugConfig = createDebugHUDConfig();
+    cam.debug = function (ctx) {
+        drawDebugWorld(this, ctx, this.debugConfig);
+    };
+    cam.debugHUD = function (ctx) {
+        drawDebugHUD(this, ctx, this.debugConfig);
+    };
+    return cam;
 }
 
 export default drawDebugHUD;

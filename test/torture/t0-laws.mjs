@@ -12,7 +12,7 @@
 
 import { CinematicCameraPro } from '../../src/index.js';
 import { createShakeState, addShake, updateShake } from '../../src/index.js';
-import { makePrng, SEED, check, makeRecorderSink } from './harness.mjs';
+import { makePrng, SEED, check, makeRecorderSink, shakePreset } from './harness.mjs';
 
 const FRAMES = 600;
 
@@ -20,7 +20,7 @@ export async function run() {
     // --- Law 1: apply() idempotent within a frame ---------------------------
     {
         const cam = new CinematicCameraPro(800, 600, 4000, 4000, 7);
-        cam.shakePreset('explosion');
+        shakePreset(cam, 'explosion');
         const a = makeRecorderSink();
         const b = makeRecorderSink();
         for (let f = 0; f < 120; f++) {
@@ -50,8 +50,8 @@ export async function run() {
         }
         const c1 = new CinematicCameraPro(800, 600, 4000, 4000, 99);
         const c2 = new CinematicCameraPro(800, 600, 4000, 4000, 99);
-        c1.shakePreset('impact', 0.9);
-        c2.shakePreset('impact', 0.9);
+        shakePreset(c1, 'impact', 0.9);
+        shakePreset(c2, 'impact', 0.9);
         const s1 = makeRecorderSink();
         const s2 = makeRecorderSink();
         for (let i = 0; i < N; i++) {
@@ -73,7 +73,7 @@ export async function run() {
     // --- Law 3: clearShakes() zeroes offsets exactly ------------------------
     {
         const cam = new CinematicCameraPro(800, 600, 4000, 4000, 3);
-        cam.shakePreset('heavy_impact');
+        shakePreset(cam, 'heavy_impact');
         for (let f = 0; f < 20; f++) cam.update(1 / 60, 100, 100);
         cam.clearShakes();
         check(cam._shake.offsetX === 0 && cam._shake.offsetY === 0 && cam._shake.angle === 0,

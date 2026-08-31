@@ -58,3 +58,11 @@ export declare function removeParallaxLayer(state: ParallaxState, id: string): v
 export declare function updateParallax(state: ParallaxState, camX: number, camY: number, zoom: number): void;
 export declare function getLayerScroll(state: ParallaxState, id: string, out: ScrollOut): ScrollOut | null;
 export declare function applyParallaxLayer(state: ParallaxState, id: string, ctx: CanvasRenderingContext2D): boolean;
+
+/**
+ * Attach the parallax subsystem to one camera (v2.0.0 detach). Per-instance
+ * own-property install; builds the ParallaxState the constructor no longer
+ * allocates and wires the per-frame tick. Returns the camera for chaining.
+ * @throws Error `code = "ERR_ALREADY_ATTACHED"` if parallax is already attached.
+ */
+export declare function withParallax<C>(cam: C): C;

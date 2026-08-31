@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CinematicCameraPro, FollowMode } from '../src/index.js';
-import { pumpRaf, rafCount } from './helpers.mjs';
+import { pumpRaf, rafCount, makeCam } from './helpers.mjs';
 
 function pumpToCompletion(seq, guard = 20000) {
     while (seq.playing && guard-- > 0) pumpRaf();
@@ -31,7 +31,7 @@ function pumpToCompletion(seq, guard = 20000) {
 // -----------------------------------------------------------------------------
 test('1. multi-target defers an armed blend; clearing multi-target resumes the glide', () => {
     const DT = 1 / 60;
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE);
     cam.trackMultiple([{ x: 100, y: 100 }, { x: 900, y: 700 }], { padding: 50 });
 
@@ -79,14 +79,14 @@ test('1. multi-target defers an armed blend; clearing multi-target resumes the g
 test('2. blendOutTime door: 0 / -0 / 0.0001 legal; -0.0001/NaN/Infinity/-Infinity/string/null throw ERR_SEQUENCE_OPTIONS', () => {
     const legal = [0, -0, 0.0001];
     for (const v of legal) {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         assert.doesNotThrow(() => cam.createSequence({ blendOutTime: v }), `blendOutTime ${v} must be legal`);
         cam.destroy();
     }
 
     const illegal = [-0.0001, NaN, Infinity, -Infinity, '0.3', null];
     for (const v of illegal) {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         let threw = null;
         try {
             cam.createSequence({ blendOutTime: v });
@@ -107,7 +107,7 @@ test('2. blendOutTime door: 0 / -0 / 0.0001 legal; -0.0001/NaN/Infinity/-Infinit
 // -----------------------------------------------------------------------------
 test('3. a new playSequence() zeroes a mid-window blend; no residue after it completes', () => {
     const DT = 1 / 60;
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE);
 
     const seqA = cam.createSequence({ blendOutTime: 0.3 }).moveTo(700, 500, 200);
@@ -140,7 +140,7 @@ test('3. a new playSequence() zeroes a mid-window blend; no residue after it com
 // -----------------------------------------------------------------------------
 test('4. seq B stop() after seq A armed a blend never re-arms it -- hard handoff', () => {
     const DT = 1 / 60;
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE);
 
     const seqA = cam.createSequence({ blendOutTime: 0.3 }).moveTo(700, 500, 200);
@@ -172,7 +172,7 @@ test('4. seq B stop() after seq A armed a blend never re-arms it -- hard handoff
 //    and duration-0 callbacks crossed by the seek must fire synchronously.
 // -----------------------------------------------------------------------------
 test('5. seek() after stop() rebuilds from the NEW pose and fires crossed callbacks synchronously', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     let called = 0;
     const seq = cam.createSequence()
         .moveTo(0, 0, 1000)
@@ -204,7 +204,7 @@ test('5. seek() after stop() rebuilds from the NEW pose and fires crossed callba
 // -----------------------------------------------------------------------------
 test("6. resolveAt at:'>' duration pins (same-end-as-previous grammar token)", () => {
     function dur(build) {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         const seq = cam.createSequence();
         build(seq);
         seq.play();
@@ -237,7 +237,7 @@ test("6. resolveAt at:'>' duration pins (same-end-as-previous grammar token)", (
 //    escape hatches -- it does not patch src (out of scope for qa).
 // -----------------------------------------------------------------------------
 test('7. zero-step sequence: play() never completes on its own; stop()/destroy() are safe and release the ticker', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     const seq = cam.createSequence(); // no steps queued
     assert.equal(seq.duration, 0, 'an empty sequence has duration 0 before play()');
 
@@ -304,7 +304,7 @@ test('7. zero-step sequence: play() never completes on its own; stop()/destroy()
 //    own repro via an explicit seq.destroy() so the suite stays leak-free.
 // -----------------------------------------------------------------------------
 test('8. FINDING: natural completion leaks the shared-ticker ref forever unless the app explicitly destroys the completed seq', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE);
     const seq = cam.createSequence({ blendOutTime: 0.2 }).moveTo(500, 400, 100);
     cam.playSequence(seq);
@@ -350,8 +350,8 @@ test('8. FINDING: natural completion leaks the shared-ticker ref forever unless 
 // now-destroyed camera). This is a boundary-of-danger pin, not a safety claim.
 // -----------------------------------------------------------------------------
 test('adversarial: re-entrant cam.destroy() from a sequence shake-step callback does not corrupt a second live camera', () => {
-    const camA = new CinematicCameraPro(800, 600, 3200, 2400, 1);
-    const camB = new CinematicCameraPro(800, 600, 3200, 2400, 2);
+    const camA = makeCam(800, 600, 3200, 2400, 1);
+    const camB = makeCam(800, 600, 3200, 2400, 2);
 
     let destroyed = false;
     const seq = camA.createSequence()

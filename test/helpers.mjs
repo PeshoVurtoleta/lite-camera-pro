@@ -8,6 +8,24 @@
 //      parallax/HUD draws only ever call a handful of context methods; this
 //      records each call so a test can assert transforms without a real canvas.
 
+// -- attach helpers (v2.0.0 detach) ----------------------------------------
+// The class ships parallax/sequence/debug as fail-closed stubs; the behavioral
+// suites below exercise the ATTACHED surface, so they attach all three once at
+// construction. This is G5 in executable form: the entire existing behavioral
+// suite passes UNCHANGED under attach. attachAll returns cam for drop-in use at
+// a construction site; makeCam(...args) constructs and attaches in one call.
+import { CinematicCameraPro } from '../src/index.js';
+import { withParallax } from '../src/ParallaxManager.js';
+import { withSequences } from '../src/CameraSequence.js';
+import { withDebug } from '../src/DebugHUD.js';
+
+export function attachAll(cam) {
+    return withDebug(withSequences(withParallax(cam)));
+}
+export function makeCam(...args) {
+    return attachAll(new CinematicCameraPro(...args));
+}
+
 // -- requestAnimationFrame polyfill (store-only) ---------------------------
 // lite-ticker's frame loop is self-perpetuating: `_tick` ends by requesting the
 // next frame. A polyfill that auto-fires (setTimeout(cb, 0)) is therefore an

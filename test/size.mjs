@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-// The 7 JS subpath entries (package.json "exports" targets; not package.json).
+// The 8 JS subpath entries (package.json "exports" targets; not package.json).
 const ENTRIES = [
     ['.',          'src/index.js'],
     ['./shake',    'src/Shake.js'],
@@ -27,9 +27,18 @@ const ENTRIES = [
     ['./multi',    'src/MultiTarget.js'],
     ['./follow',   'src/FollowMode.js'],
     ['./sequence', 'src/CameraSequence.js'],
+    ['./debug',    'src/DebugHUD.js'],
 ];
 
 const SHAKE_GZ_BUDGET = 16384;      // bytes -- charter number, fixed.
+// v2.0.0 detach ceiling (G3). The "." bundle lost the four subsystems + all of
+// lite-timeline: 24.49 KB -> 15.62 KB gz measured this tree (a 36% drop). The
+// gate is measured + 0.25 KB slack, tight enough that any re-entangling import
+// creeping the four modules back into the "." graph trips it. NOT the planner's
+// 14.70 KB projection: gz of the removed subsystems (heavy on repeated string
+// literals) compresses well below their raw share, so the honest measured drop
+// is 36%, not 40%. Fixed at measured, never widened. See decisions/0004.
+const DOT_GZ_BUDGET = 16252;        // bytes -- 15996 measured + 256 slack.
 const NOISE_SOURCE_BYTES = 39613;   // Noise.js source size.
 const NOISE_SHARE_TRIGGER = 0.5;    // >= 50% -> upstream regression.
 
@@ -89,11 +98,19 @@ for (const r of rows) {
 }
 
 const shake = rows.find((r) => r.name === './shake');
+const dot = rows.find((r) => r.name === '.');
 
 if (shake.gz > SHAKE_GZ_BUDGET) {
     process.stderr.write(
         'size: FAIL -- ./shake gz ' + shake.gz + ' B exceeds budget ' +
         SHAKE_GZ_BUDGET + ' B\n');
+    breached = true;
+}
+
+if (dot.gz > DOT_GZ_BUDGET) {
+    process.stderr.write(
+        'size: FAIL -- "." gz ' + dot.gz + ' B exceeds detach ceiling ' +
+        DOT_GZ_BUDGET + ' B (a subsystem re-entangled into the "." graph?)\n');
     breached = true;
 }
 
@@ -110,5 +127,6 @@ if (breached) {
 }
 
 process.stdout.write(
-    'size: ok -- ./shake gz ' + shake.gz + ' B <= ' + SHAKE_GZ_BUDGET + ' B\n');
+    'size: ok -- ./shake gz ' + shake.gz + ' B <= ' + SHAKE_GZ_BUDGET + ' B; ' +
+    '"." gz ' + dot.gz + ' B <= ' + DOT_GZ_BUDGET + ' B\n');
 process.exit(0);

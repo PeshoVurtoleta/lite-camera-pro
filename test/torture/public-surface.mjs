@@ -12,8 +12,12 @@
 
 /** Every public method of CinematicCameraPro (getters excluded -- null-safe). */
 export const PUBLIC_METHODS = [
+    // v2.0.0 detach: shakePreset() was dropped at the major (removed from the
+    // prototype, no tombstone). The six detached-subsystem stubs (debug/debugHUD/
+    // createSequence/addParallaxLayer/removeParallaxLayer/applyParallax) STAY --
+    // destroy() rebinds them to its sentinel, so CP-8 still covers them.
     'update', 'apply', 'debug', 'debugHUD',
-    'addTrauma', 'shake', 'shakePreset', 'clearShakes',
+    'addTrauma', 'shake', 'clearShakes',
     'setMode', 'trackMultiple', 'trackSingle', 'setTargetCount',
     'createSequence', 'playSequence', 'stopSequence',
     'addParallaxLayer', 'removeParallaxLayer', 'applyParallax',
@@ -34,7 +38,6 @@ export function callByName(cam, name, sink) {
         case 'debugHUD': return cam.debugHUD(sink);
         case 'addTrauma': return cam.addTrauma(0.5);
         case 'shake': return cam.shake({ trauma: 0.5 });
-        case 'shakePreset': return cam.shakePreset('impact');
         case 'clearShakes': return cam.clearShakes();
         case 'setMode': return cam.setMode(0);
         case 'trackMultiple': return cam.trackMultiple([{ x: 0, y: 0 }], {});

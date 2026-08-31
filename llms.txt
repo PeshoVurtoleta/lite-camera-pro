@@ -2,15 +2,23 @@
 
 > Cinematic Canvas2D camera system for games. Zero-GC in the update/render hot
 > path. Extends @zakkster/lite-camera's CinematicCamera. Adds smooth/eased zoom,
-> 5 follow modes, multi-target auto-framing, an 8-slot noise-based shake engine
-> with presets, fluent timeline sequences, a 16-layer parallax manager, per-edge
-> bounds, a debug HUD, and zero-alloc coordinate conversion.
+> 5 follow modes, multi-target auto-framing, and an 8-slot noise-based shake
+> engine at the core "." entry; parallax, timeline sequences and a debug HUD are
+> per-instance opt-ins on their own subpaths (v2.0.0 detach).
 
-Version: 1.3.0
+Version: 2.0.0
 
 ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
 CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
-(constructor, createSequence, trackMultiple) may allocate.
+(constructor, withX attach, createSequence, trackMultiple) may allocate.
+
+v2.0.0 detach (CP-21/CP-22/CP-23): a bundler cannot drop a reachable class
+method, so a class-only consumer used to ship four subsystems it never called
+(DebugHUD, CameraSequence, ParallaxManager, ShakePresets) plus all of
+@zakkster/lite-timeline. Those four are now SEVERED from the class and the root
+barrel; the "." bundle dropped 24.49 KB -> 15.62 KB gz (~36%). Parallax,
+sequences and debug come back per instance via withParallax / withSequences /
+withDebug on their subpaths; presets moved to ./shake; shakePreset() was dropped.
 
 ## Install
 npm install @zakkster/lite-camera-pro
@@ -21,12 +29,29 @@ new CinematicCameraPro(viewW, viewH, worldW, worldH, seed = 42)
 Game loop (once per frame):
   cam.update(dt, playerX, playerY, playerVX = 0, playerVY = 0)
 Render:
-  ctx.save(); cam.apply(ctx); drawWorld(ctx); cam.debug(ctx); ctx.restore();
-  cam.debugHUD(ctx);
+  ctx.save(); cam.apply(ctx); drawWorld(ctx); ctx.restore();
 - apply(ctx): translates/scales/rotates the canvas to the camera transform (includes shake).
-- debug(ctx): WORLD-space overlay (deadzone, lookahead, world bounds). Call inside the apply transform.
-- debugHUD(ctx): SCREEN-space overlay (position, zoom, mode, per-slot trauma bars, sequence %). Call after restore.
 update() dispatches by priority: active sequence > multi-target > single-target follow mode.
+A class-only camera constructs with NO parallax/debug state: cam._parallax === null
+and cam.debugConfig === null until the matching withX attaches (CP-22).
+
+## Attach (v2.0.0 detach -- opt in per instance)
+import { withParallax } from '@zakkster/lite-camera-pro/parallax';
+import { withSequences } from '@zakkster/lite-camera-pro/sequence';
+import { withDebug } from '@zakkster/lite-camera-pro/debug';
+withParallax(cam);      // installs addParallaxLayer/removeParallaxLayer/applyParallax + cam._parallax
+withSequences(cam);     // installs cam.createSequence(opts) -> createCameraSequence(cam, opts)
+withDebug(cam);         // installs cam.debug/cam.debugHUD + cam.debugConfig
+Each withX: per-instance own-property install (never prototype mutation, so two
+cameras attach independently), returns cam for chaining. Single-shot -- a second
+attach of the same subsystem throws ERR_ALREADY_ATTACHED (a silent re-attach
+would discard live layers). No unattach: destroy() is the only exit, and
+destroyed beats unattached (a post-destroy call throws ERR_CAMERA_DESTROYED, not
+a not-attached code). withX on a destroyed camera also throws ERR_CAMERA_DESTROYED
+(never a zombie re-attach, never ERR_ALREADY_ATTACHED). Sequences alone can skip
+the attach: createCameraSequence(cam,
+opts) from ./sequence works directly (every _seq site duck-types; playSequence
+already accepts any ./sequence-built sequence).
 
 ## Follow modes
 cam.setMode(FollowMode.SMOOTH | LOCK | PREDICTIVE | CUT | HYBRID)  // returns this
@@ -57,13 +82,16 @@ targets: array of objects with numeric x, y.
 ## Shake (8 simultaneous slots, summed; simplex-noise driven)
 cam.addTrauma(amount)                       // simple omnidirectional trauma (backward compatible)
 cam.shake(profile, intensity = 1)           // custom: { trauma, freq, decay, maxOffset, maxAngle, dirX, dirY }
-cam.shakePreset(name, intensity = 1)        // named preset
 cam.clearShakes()
+Named presets moved to the ./shake subpath at v2.0.0 (cam.shakePreset was dropped):
+  import { getPreset } from '@zakkster/lite-camera-pro/shake';
+  const p = getPreset(name); if (p) cam.shake(p, intensity);   // guard is MANDATORY (getPreset returns null on an unknown name; cam.shake(null) throws)
 Preset names: 'explosion','earthquake','recoil','impact','landing','damage','rumble','heavy_impact'.
-Registry (named exports): registerPreset(name, profile), listPresets(), getPreset(name).
-Preset constants exported: EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT.
+Registry (./shake exports): registerPreset(name, profile), listPresets(), getPreset(name).
+Preset constants (./shake): EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT.
 
-## Sequences (fluent timeline; takes over position + zoom)
+## Sequences (fluent timeline; takes over position + zoom) -- withSequences or ./sequence
+withSequences(cam);   // once, then:
 const seq = cam.createSequence({ onComplete, blendOutTime })
   .moveTo(x, y, durationMs)
   .zoomTo(level, durationMs)
@@ -79,7 +107,7 @@ blendOutTime is SECONDS (class-API units, default 0.3). Different units -- do no
 Step position `{ at }` accepts lite-timeline syntax and honors `at: 0` (absolute t=0);
 `at: undefined` appends; `at: null` appends (ignored by lite-timeline).
 Completion blends camera POSITION back to follow over blendOutTime seconds (0 = hard
-handoff, the pre-1.3.0 behavior); ZOOM is not blended (the sequence's final zoom persists).
+handoff); ZOOM is not blended (the sequence's final zoom persists).
 A blend is only visible in position-lerping modes (SMOOTH, PREDICTIVE); LOCK/CUT/HYBRID
 (locked vertical) write pos directly. Looping sequences never complete, so never blend.
 Lifecycle triangle: pause() = resumable, ticker held, pose frozen; stop()/stopSequence() =
@@ -93,17 +121,18 @@ destroyed: progress reads 0 and duration falls back to the naive step-sum (an `a
 build reads 1600 while live, 1500 after stop). seek() rebuilds from a fresh snapshot when the
 timeline was destroyed, and (like all timeline callbacks) runs user code -- shake/.call steps,
 onComplete -- SYNCHRONOUSLY for every track it crosses. Re-entrant destroy/stop from a sequence
-callback is unguarded in 1.3.0 (routed to PRO4); defer teardown to the next frame.
-Sequence preset helpers (named exports, return a sequence): panTo(cam, x, y, ms),
+callback is unguarded (routed to PRO4); defer teardown to the next frame.
+Sequence preset helpers (./sequence exports, return a sequence): panTo(cam, x, y, ms),
 dramaticZoom(cam, x, y, level, ms), bossReveal(cam, x, y, ms), timedShake(cam, presetName, ms).
 bossReveal captures its return pose at BUILD time -- build it immediately before playing.
 Read cam.sequencePlaying (boolean).
 
-## Parallax (up to 16 layers)
+## Parallax (up to 16 layers) -- withParallax
+withParallax(cam);   // once, then:
 cam.addParallaxLayer(id, speedX, speedY = speedX, opts)   // re-adding same id updates it
 cam.removeParallaxLayer(id)
 cam.applyParallax(id, ctx)                                 // per-layer transform; wrap in ctx.save()/restore()
-WrapMode exported for layer wrapping behavior.
+WrapMode (./parallax export) for layer wrapping behavior.
 
 ## Bounds (per-edge: HARD | SOFT | ELASTIC | NONE)
 import { BoundsType } from '@zakkster/lite-camera-pro';
@@ -116,37 +145,53 @@ Tuning: cam._bounds.softZone, cam._bounds.elasticMax, cam._bounds.elasticStrengt
 ## Save / load
 const snap = cam.getState();   // { posX, posY, targetX, targetY, zoom, mode }
 cam.setState(snap);            // restores and recomputes visible dims
-cam.destroy();                 // releases internal state
+cam.destroy();                 // releases internal state; every method then throws ERR_CAMERA_DESTROYED
 
-## Debug HUD
+## Debug HUD -- withDebug or the ./debug draws
+withDebug(cam);   // installs cam.debug/cam.debugHUD + builds cam.debugConfig, then:
+cam.debug(ctx);      // WORLD-space overlay (deadzone, lookahead, world bounds); call inside the apply transform
+cam.debugHUD(ctx);   // SCREEN-space overlay (position, zoom, mode, per-slot trauma bars, sequence %); call after restore
 cam.debugConfig.show.shake | parallax | bounds | ... = true|false   // toggle panels
-createDebugHUDConfig() exported to build a config; drawDebugWorld(cam, ctx, config) and drawDebugHUD(cam, ctx, config) are the underlying draws (cam.debug / cam.debugHUD wrap them).
+Standalone (no attach) from ./debug: createDebugHUDConfig() builds a config;
+drawDebugWorld(cam, ctx, config) and drawDebugHUD(cam, ctx, config) are the underlying draws.
+
+## Root "." surface (exactly 20 names, v2.0.0 -- D5)
+VERSION, CinematicCameraPro, default, FollowMode, FOLLOW_STRATEGIES,
+createMultiTargetState, updateMultiTarget, createShakeState, addShake,
+addTraumaSimple, updateShake, computeShake, clearShakes, BoundsType,
+createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect,
+applyBounds. Nothing else -- this is precisely what the class itself reaches.
 
 ## Standalone functional API (tree-shakeable; the class composes these)
-Shake:    createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes
-Parallax: createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer
-Bounds:   createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds
-Multi:    createMultiTargetState, updateMultiTarget
-Sequence: createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake
-Enums:    FollowMode, FOLLOW_STRATEGIES, BoundsType, WrapMode
+Shake (root + ./shake):    createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes
+Presets (./shake):         getPreset, registerPreset, listPresets + EXPLOSION/EARTHQUAKE/RECOIL/IMPACT/LANDING/DAMAGE/RUMBLE/HEAVY_IMPACT
+Parallax (./parallax):     createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode, withParallax
+Bounds (root + ./bounds):  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, BoundsType
+Multi (root + ./multi):    createMultiTargetState, updateMultiTarget
+Follow (root + ./follow):  FollowMode, FOLLOW_STRATEGIES
+Sequence (./sequence):     createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake, withSequences
+Debug (./debug):           createDebugHUDConfig, drawDebugHUD, drawDebugWorld, withDebug
 
 ## Subpath exports (import only what you use; gz, esm, unminified, gzip -9)
-Beside the "." main entry, six subsystem subpaths + "./package.json". Same runtime
-identities as the main entry (one engine, no fork). Per-subpath gz weight:
+Beside the "." main entry, seven subsystem subpaths + "./package.json". Same runtime
+identities as their source modules (one engine, no fork). Per-subpath gz weight:
   ./shake     3.01 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
-  ./parallax  0.89 KB  createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode
+  ./parallax  1.10 KB  createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode, withParallax
   ./bounds    1.13 KB  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, BoundsType
   ./multi     0.89 KB  createMultiTargetState, updateMultiTarget
   ./follow    0.71 KB  FollowMode, FOLLOW_STRATEGIES
-  ./sequence  7.03 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake  (drags lite-timeline + lite-ease by design -- the only subpath that does)
-  .           24.40 KB full class + functional layer
+  ./sequence  7.27 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake, withSequences  (drags lite-timeline + lite-ease by design -- the only subpath that does)
+  ./debug     2.04 KB  createDebugHUDConfig, drawDebugHUD, drawDebugWorld, withDebug
+  .           15.62 KB class + the 20-name root surface (no parallax/sequence/debug/presets -- v2.0.0 detach)
 Self-reference example (shake only):
   import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
 
 ## Dependencies (all @zakkster, first-party)
 @zakkster/lite-camera (base CinematicCamera), lite-ease, lite-lerp, lite-noise, lite-timeline.
+lite-timeline is reached ONLY through the ./sequence subpath (v2.0.0) -- a class-only
+consumer ships none of it.
 
-## Fail-closed doors (1.2.0)
+## Fail-closed doors
 Ordinary runtime garbage (a NaN dt, a frame-time spike, a bad save file) can no longer
 break the render at frame N+1. Setters validate at the call; the update path validates at
 its entry; every unverified numeric fails loud or is a documented no-op. Hot bodies pay
@@ -163,7 +208,7 @@ Shake profiles (cam.shake / addShake): every numeric (trauma, decay, freq, maxOf
 maxAngle, dirX, dirY) is resolved to its default then finiteness-checked in the cold entry;
 a non-finite field activates NO slot (a NaN decay would otherwise leave a slot alive forever).
 
-Sequence options (1.3.0): createSequence({ blendOutTime }) validates blendOutTime as a finite
+Sequence options: createSequence({ blendOutTime }) validates blendOutTime as a finite
 number >= 0 SECONDS at construction (a cold door, ERR_SEQUENCE_OPTIONS). The hot path gains
 one `> 0` compare on the completion blend field; no other option key is validated (unknown-key
 rejection is deferred to a future major).
@@ -187,12 +232,21 @@ Error codes (all throw a house-style Error with a .code):
                       (setup path fails loud).
 - ERR_SEQUENCE_OPTIONS  createCameraSequence / cam.createSequence({ blendOutTime }): blendOutTime
                       must be a finite number >= 0 SECONDS (0 legal = hard handoff). Validated
-                      once at construction (a cold setup-time door); 1.3.0.
-- ERR_CAMERA_DESTROYED  every public method after destroy() (1.0.1).
+                      once at construction (a cold setup-time door).
+- ERR_PARALLAX_NOT_ATTACHED  cam.addParallaxLayer/removeParallaxLayer/applyParallax before
+                      withParallax(cam). The message names the exact import + call to fix it.
+- ERR_SEQUENCE_NOT_ATTACHED  cam.createSequence before withSequences(cam) (or use
+                      createCameraSequence(cam, opts) from ./sequence directly).
+- ERR_DEBUG_NOT_ATTACHED  cam.debug/cam.debugHUD before withDebug(cam).
+- ERR_ALREADY_ATTACHED  a second withParallax/withSequences/withDebug on the same camera
+                      (per-instance, single-shot; construction-time programmer error).
+- ERR_CAMERA_DESTROYED  every public method after destroy(). Destroyed beats unattached:
+                      a post-destroy subsystem call reports this, not a not-attached code.
 getPreset(name): a non-string or unknown name returns null (never throws) -- the event path.
-cam.shakePreset(name): an unknown or non-string name is a no-op returning this; use
-listPresets() to enumerate valid names.
+shakePreset() was removed at v2.0.0 (no throwing tombstone); use the guarded getPreset idiom.
 
 ## Notes
-- Migration: CinematicCameraPro is a drop-in superset of lite-camera's CinematicCamera.
+- Migration: CinematicCameraPro is a drop-in superset of lite-camera's CinematicCamera. From
+  1.x, add withParallax/withSequences/withDebug for those subsystems and swap cam.shakePreset(n, i)
+  for `const p = getPreset(n); if (p) cam.shake(p, i)` (getPreset from ./shake).
 - Zero-GC: coordinate conversion uses caller-owned out objects; visible dims are cached properties (no getVisibleArea()); shake (8) and parallax (16) slots are pre-allocated and reused.

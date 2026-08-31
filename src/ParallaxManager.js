@@ -200,3 +200,49 @@ export function applyParallaxLayer(state, id, ctx) {
     }
     return false;
 }
+
+/**
+ * Attach the parallax subsystem to one camera (v2.0.0 detach, CP-22/D1).
+ * The class ships parallax methods as fail-closed stubs; this restores the
+ * real behavior per-instance -- own-property install only, never prototype
+ * mutation, so two cameras in a page attach independently. It builds the
+ * ParallaxState the constructor no longer allocates and wires the per-frame
+ * tick fn the class's update() step 7 calls (carried on the instance so
+ * ParallaxManager stays out of the class import graph, G1). Single-shot:
+ * a second attach throws ERR_ALREADY_ATTACHED rather than silently discarding
+ * live layers. destroy() is the only exit (it rebinds these to its sentinel).
+ *
+ * @param {Object} cam  A CinematicCameraPro instance
+ * @returns {Object} cam, for chaining
+ * @throws {Error} code "ERR_ALREADY_ATTACHED" if parallax is already attached
+ */
+export function withParallax(cam) {
+    // Destroyed beats unattached (QA-1): destroy() rebinds update as an
+    // own-property, so a corpse is Object.hasOwn(cam, 'update'). Attaching over
+    // the _dead sentinels would install live zombie methods -- fail closed first.
+    if (Object.hasOwn(cam, 'update')) {
+        const e = new Error("CinematicCameraPro: use after destroy()");
+        e.code = "ERR_CAMERA_DESTROYED";
+        throw e;
+    }
+    if (cam._parallax !== null) {
+        const e = new Error("CinematicCameraPro: parallax already attached. " +
+            "withParallax(camera) is per-instance and single-shot.");
+        e.code = "ERR_ALREADY_ATTACHED";
+        throw e;
+    }
+    cam._parallax = createParallaxState();
+    cam._parallaxTick = updateParallax;
+    cam.addParallaxLayer = function (id, speedX, speedY, opts) {
+        addParallaxLayer(this._parallax, id, speedX, speedY, opts);
+        return this;
+    };
+    cam.removeParallaxLayer = function (id) {
+        removeParallaxLayer(this._parallax, id);
+        return this;
+    };
+    cam.applyParallax = function (id, ctx) {
+        return applyParallaxLayer(this._parallax, id, ctx);
+    };
+    return cam;
+}

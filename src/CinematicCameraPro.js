@@ -26,15 +26,6 @@ import {
     computeShake,
     clearShakes as clearShakeState
 } from './ShakeEngine.js';
-import {getPreset} from './ShakePresets.js';
-import {createCameraSequence} from './CameraSequence.js';
-import {
-    createParallaxState,
-    addParallaxLayer,
-    removeParallaxLayer,
-    updateParallax,
-    applyParallaxLayer
-} from './ParallaxManager.js';
 import {
     createBoundsState,
     setBoundsAll,
@@ -44,7 +35,13 @@ import {
     applyBounds,
     BoundsType
 } from './BoundsSystem.js';
-import {createDebugHUDConfig, drawDebugHUD, drawDebugWorld} from './DebugHUD.js';
+
+// CP-21/CP-22/CP-23 (v2.0.0 detach): ShakePresets, CameraSequence,
+// ParallaxManager and DebugHUD (and thus @zakkster/lite-timeline) are severed --
+// a bundler cannot drop a reachable class method, so a class-only consumer must
+// not reach them by import. They return per-instance via withParallax/
+// withSequences/withDebug on their subpaths; presets drop to ./shake. See
+// decisions/0004-detach.md.
 
 // Cold-path sentinel: after destroy() every method that reads nulled internal
 // state is rebound to this so a use-after-destroy fails closed with a named
@@ -53,6 +50,33 @@ import {createDebugHUDConfig, drawDebugHUD, drawDebugWorld} from './DebugHUD.js'
 const _dead = () => {
     const e = new Error("CinematicCameraPro: use after destroy()");
     e.code = "ERR_CAMERA_DESTROYED";
+    throw e;
+};
+
+// Fail-closed stubs for the three detached subsystems (D3). A subsystem method
+// called before its withX() attach throws a named error whose message names the
+// exact import + call that fixes it -- never a raw TypeError, never a silent
+// no-op. withX() installs the real bound methods as own-properties that shadow
+// these prototype stubs; destroy() rebinds those own-properties to _dead first,
+// so a post-destroy call reports ERR_CAMERA_DESTROYED, not a not-attached code.
+// One thrower per subsystem so each .code is a literal (the ERR-drift guard
+// scans for `.code = "ERR_..."`).
+const _parallaxNotAttached = () => {
+    const e = new Error("CinematicCameraPro: parallax not attached. import { withParallax } " +
+        "from '@zakkster/lite-camera-pro/parallax'; withParallax(camera);");
+    e.code = "ERR_PARALLAX_NOT_ATTACHED";
+    throw e;
+};
+const _sequenceNotAttached = () => {
+    const e = new Error("CinematicCameraPro: sequence not attached. import { withSequences } " +
+        "from '@zakkster/lite-camera-pro/sequence'; withSequences(camera);");
+    e.code = "ERR_SEQUENCE_NOT_ATTACHED";
+    throw e;
+};
+const _debugNotAttached = () => {
+    const e = new Error("CinematicCameraPro: debug not attached. import { withDebug } " +
+        "from '@zakkster/lite-camera-pro/debug'; withDebug(camera);");
+    e.code = "ERR_DEBUG_NOT_ATTACHED";
     throw e;
 };
 
@@ -125,14 +149,20 @@ export class CinematicCameraPro extends CinematicCamera {
         // decisions/0003-blend-out.md.
         this._blendRemain = 0;
 
-        // ── Parallax layer manager ──
-        this._parallax = createParallaxState();
+        // -- Parallax layer manager (null until withParallax attaches, CP-22) --
+        // A class-only consumer no longer pays for a ParallaxState build it never
+        // uses. update() step 7 tolerates null (see the guard there). The per-
+        // frame tick fn is carried here, not statically imported, so
+        // ParallaxManager.js stays out of the "." import graph (G1); withParallax
+        // sets it. Declared here so every camera shares one hidden class.
+        this._parallax = null;
+        this._parallaxTick = null;
 
         // ── Smart bounds system ──
         this._bounds = createBoundsState();
 
-        // ── Debug HUD configuration ──
-        this.debugConfig = createDebugHUDConfig();
+        // -- Debug HUD configuration (null until withDebug attaches, CP-22) --
+        this.debugConfig = null;
     }
 
     // ─────────────────────────────────────────────────────
@@ -309,30 +339,6 @@ export class CinematicCameraPro extends CinematicCamera {
     }
 
     /**
-     * Fire a named shake preset.
-     *
-     * Built-in presets: explosion, earthquake, recoil, impact,
-     * landing, damage, rumble, heavy_impact.
-     *
-     * Fail-closed (CP-12/CP-19): an unknown name OR a non-string name is a
-     * documented no-op -- getPreset returns null, nothing is activated, and
-     * `this` is returned. Use listPresets() to enumerate valid names.
-     *
-     * @param {string} name       Preset name (case-insensitive)
-     * @param {number} [intensity=1] Scale multiplier
-     * @returns {CinematicCameraPro} this
-     *
-     * @example
-     * camera.shakePreset('explosion');
-     * camera.shakePreset('recoil', 0.5); // half intensity
-     */
-    shakePreset(name, intensity = 1) {
-        const preset = getPreset(name);
-        if (preset) addShake(this._shake, preset, intensity);
-        return this;
-    }
-
-    /**
      * Stop all active shakes immediately.
      * @returns {CinematicCameraPro} this
      */
@@ -355,22 +361,16 @@ export class CinematicCameraPro extends CinematicCamera {
      *   to follow on completion (0 = hard handoff). Step durations are in
      *   MILLISECONDS -- different units. Zoom is not blended.
      * @returns {CameraSequence} A fluent sequence builder
-     * @throws {Error} code "ERR_SEQUENCE_OPTIONS" if blendOutTime is non-finite
-     *   or negative.
+     * @throws {Error} "ERR_SEQUENCE_NOT_ATTACHED" until withSequences() installs
+     *   the real method (v2.0.0 detach); then "ERR_SEQUENCE_OPTIONS" on bad opts.
      *
      * @example
-     * const seq = camera.createSequence()
-     *   .moveTo(boss.x, boss.y, 1200)
-     *   .zoomTo(1.8, 800)
-     *   .shake('explosion')
-     *   .wait(500)
-     *   .moveTo(player.x, player.y, 1000);
-     *
+     * import { withSequences } from '@zakkster/lite-camera-pro/sequence';
+     * withSequences(camera);                  // once, after construction
+     * const seq = camera.createSequence().moveTo(boss.x, boss.y, 1200);
      * camera.playSequence(seq);
      */
-    createSequence(options) {
-        return createCameraSequence(this, options);
-    }
+    createSequence() { _sequenceNotAttached(); }
 
     /**
      * Play a camera sequence. While playing, the sequence takes
@@ -442,26 +442,23 @@ export class CinematicCameraPro extends CinematicCamera {
      * @param {number} [speedY]  Vertical (defaults to speedX)
      * @param {Object} [opts]    { offsetX, offsetY, wrap }
      * @returns {CinematicCameraPro} this
+     * @throws {Error} "ERR_PARALLAX_NOT_ATTACHED" until withParallax() installs
+     *   the real method (v2.0.0 detach).
      *
      * @example
-     * camera.addParallaxLayer('sky',    0.1);
-     * camera.addParallaxLayer('clouds', 0.3);
-     * camera.addParallaxLayer('trees',  0.7, 0.7, { wrap: WrapMode.REPEAT_X });
+     * import { withParallax } from '@zakkster/lite-camera-pro/parallax';
+     * withParallax(camera);                   // once, after construction
+     * camera.addParallaxLayer('sky', 0.1);
      */
-    addParallaxLayer(id, speedX, speedY, opts) {
-        addParallaxLayer(this._parallax, id, speedX, speedY, opts);
-        return this;
-    }
+    addParallaxLayer() { _parallaxNotAttached(); }
 
     /**
      * Remove a parallax layer.
      * @param {string} id  Layer name
      * @returns {CinematicCameraPro} this
+     * @throws {Error} "ERR_PARALLAX_NOT_ATTACHED" until withParallax() attaches.
      */
-    removeParallaxLayer(id) {
-        removeParallaxLayer(this._parallax, id);
-        return this;
-    }
+    removeParallaxLayer() { _parallaxNotAttached(); }
 
     /**
      * Apply a parallax layer's transform to a canvas context.
@@ -470,16 +467,15 @@ export class CinematicCameraPro extends CinematicCamera {
      * @param {string} id   Layer name
      * @param {CanvasRenderingContext2D} ctx
      * @returns {boolean} true if layer was found
+     * @throws {Error} "ERR_PARALLAX_NOT_ATTACHED" until withParallax() attaches.
      *
      * @example
      * ctx.save();
-     * camera.applyParallax('clouds', ctx);
+     * camera.applyParallax('clouds', ctx);   // after withParallax(camera)
      * drawClouds(ctx);
      * ctx.restore();
      */
-    applyParallax(id, ctx) {
-        return applyParallaxLayer(this._parallax, id, ctx);
-    }
+    applyParallax() { _parallaxNotAttached(); }
 
     // ─────────────────────────────────────────────────────
     //  BOUNDS API
@@ -900,8 +896,12 @@ export class CinematicCameraPro extends CinematicCamera {
             this.pos[1] += (this.target[1] - this.pos[1]) * this.lerpSpeed * dt;
         }
         // ── 7. Parallax layer update (all paths) ──
-        if (this._parallax.activeCount > 0) {
-            updateParallax(this._parallax, this.pos[0], this.pos[1], this.zoom);
+        // _parallax is null until withParallax() attaches (CP-22); the null
+        // compare guards it (D2: measured delta 2.070 ns/op, shipped over a
+        // state-forking sentinel -- decisions/0004). The tick fn is on the instance,
+        // not imported, so ParallaxManager stays out of the "." graph (G1).
+        if (this._parallax !== null && this._parallax.activeCount > 0) {
+            this._parallaxTick(this._parallax, this.pos[0], this.pos[1], this.zoom);
         }
 
         // ── 8. Shake update (all paths) ──
@@ -960,10 +960,10 @@ export class CinematicCameraPro extends CinematicCamera {
      * Call AFTER apply() so it renders in camera-transformed space.
      *
      * @param {CanvasRenderingContext2D} ctx
+     * @throws {Error} "ERR_DEBUG_NOT_ATTACHED" until withDebug() attaches from
+     *   '@zakkster/lite-camera-pro/debug' (v2.0.0 detach).
      */
-    debug(ctx) {
-        drawDebugWorld(this, ctx, this.debugConfig);
-    }
+    debug() { _debugNotAttached(); }
 
     /**
      * Draw screen-space HUD (all camera state).
@@ -972,10 +972,10 @@ export class CinematicCameraPro extends CinematicCamera {
      * Toggle panels: camera.debugConfig.show.shake = false;
      *
      * @param {CanvasRenderingContext2D} ctx
+     * @throws {Error} "ERR_DEBUG_NOT_ATTACHED" until withDebug() attaches from
+     *   '@zakkster/lite-camera-pro/debug' (v2.0.0 detach).
      */
-    debugHUD(ctx) {
-        drawDebugHUD(this, ctx, this.debugConfig);
-    }
+    debugHUD() { _debugNotAttached(); }
 
     // ─────────────────────────────────────────────────────
     //  SAVE / LOAD
@@ -1114,7 +1114,7 @@ export class CinematicCameraPro extends CinematicCamera {
         // Pro's message for parity. Getters (sequencePlaying) are already
         // null-safe. A double destroy() throws the same named error.
         this.update = this.apply = this.debug = this.debugHUD =
-            this.addTrauma = this.shake = this.shakePreset = this.clearShakes =
+            this.addTrauma = this.shake = this.clearShakes =
             this.setMode = this.trackMultiple = this.trackSingle = this.setTargetCount =
             this.createSequence = this.playSequence = this.stopSequence =
             this.addParallaxLayer = this.removeParallaxLayer = this.applyParallax =

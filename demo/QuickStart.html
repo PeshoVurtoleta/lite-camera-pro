@@ -205,7 +205,13 @@
 </script>
 
 <script type="module">
+    // v2.0.0 detach: parallax/sequence/debug left the "." barrel; opt in per
+    // instance from their own module files (the ./parallax, ./sequence, ./debug
+    // subpaths). Relative source imports -- no importmap entry needed.
     import {CinematicCameraPro, FollowMode, BoundsType, VERSION} from '../src/index.js';
+    import { withParallax } from '../src/ParallaxManager.js';
+    import { withSequences } from '../src/CameraSequence.js';
+    import { withDebug } from '../src/DebugHUD.js';
 
     // ---------------------------------------------------------
     //  ENGINE SETUP
@@ -227,6 +233,12 @@
 
     // The Pro Camera
     const cam = new CinematicCameraPro(canvas.width, canvas.height, WORLD_W, WORLD_H);
+    // v2.0.0 detach: opt in to parallax, sequences and debug once, after
+    // construction. withDebug builds cam.debugConfig (the constructor no longer
+    // does), so it must run before the config is touched below.
+    withParallax(cam);
+    withSequences(cam);
+    withDebug(cam);
     // Show debug HUD by default
     cam.debugConfig.show.shake = true;
     cam.debugConfig.show.bounds = true;

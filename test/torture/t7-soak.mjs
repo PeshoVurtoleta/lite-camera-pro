@@ -35,7 +35,7 @@ import {
 } from '@zakkster/lite-leak';
 import { effect, dispose } from '@zakkster/lite-signal';
 import { CinematicCameraPro } from '../../src/index.js';
-import { noopSink, check, rafCount, pumpRaf } from './harness.mjs';
+import { noopSink, check, rafCount, pumpRaf, makeCam, shakePreset } from './harness.mjs';
 
 const CYCLES = 4096; // leak_cycles
 
@@ -53,9 +53,9 @@ export async function run() {
 
     for (let i = 0; i < CYCLES; i++) {
         const owner = effect(() => {
-            const cam = new CinematicCameraPro(800, 600, 3200, 2400, i & 255);
+            const cam = makeCam(800, 600, 3200, 2400, i & 255);
             cam.addTrauma(1.0);
-            cam.shakePreset('impact', 0.7 + (i & 7) * 0.03);
+            shakePreset(cam, 'impact', 0.7 + (i & 7) * 0.03);
             cam.addParallaxLayer('bg', 0.4);
             cam.update(1 / 60, 100 + i, 80 + (i & 63));
             cam.apply(noopSink);
@@ -103,7 +103,7 @@ export async function run() {
         const N = 512;
         for (let i = 0; i < N; i++) {
             const owner = effect(() => {
-                const cam = new CinematicCameraPro(800, 600, 3200, 2400, i & 255);
+                const cam = makeCam(800, 600, 3200, 2400, i & 255);
                 const seq = cam.createSequence({ blendOutTime: 0.3 })
                     .moveTo(400 + (i & 63), 300, 1000)
                     .zoomTo(1.5, 800)

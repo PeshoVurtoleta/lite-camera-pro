@@ -12,8 +12,9 @@ import assert from 'node:assert/strict';
 import {
     CinematicCameraPro,
     createShakeState, addShake, updateShake, computeShake, clearShakes,
-    getPreset,
 } from '../src/index.js';
+// v2.0.0 detach: getPreset left the root barrel -- it lives on the ./shake subpath.
+import { getPreset } from '../src/ShakePresets.js';
 
 /** Every primitive field of a shake slot, for a true deep compare (not just trauma/time). */
 function slotSnapshot(slot) {

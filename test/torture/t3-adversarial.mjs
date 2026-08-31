@@ -15,7 +15,7 @@ import { CinematicCameraPro } from '../../src/index.js';
 import {
     createShakeState, addShake, updateShake, computeShake, clearShakes,
 } from '../../src/index.js';
-import { makePrng, SEED, check, rafCount, pumpRaf } from './harness.mjs';
+import { makePrng, SEED, check, rafCount, pumpRaf, makeCam, shakePreset } from './harness.mjs';
 
 const STORM_FRAMES = 10000;
 const BoundsType_NONE = 3;
@@ -23,16 +23,16 @@ const BoundsType_NONE = 3;
 export async function run() {
     // --- (a) seeded dt-spike storm, both bounds variants --------------------
     for (const boundsNone of [false, true]) {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 11);
+        const cam = makeCam(800, 600, 3200, 2400, 11);
         if (boundsNone) cam.setBoundsType(BoundsType_NONE);
-        cam.shakePreset('explosion');
+        shakePreset(cam, 'explosion');
         const prng = makePrng(SEED);
 
         const PX = 1600, PY = 1200; // fixed in-world target
         for (let f = 0; f < STORM_FRAMES; f++) {
             const dt = (prng() / 0xffffffff) * 2; // [0, 2] -- legal, mostly > maxDt
             cam.update(dt, PX, PY, 0, 0);
-            if (!cam._shake.active) cam.shakePreset('rumble');
+            if (!cam._shake.active) shakePreset(cam, 'rumble');
             check(Number.isFinite(cam.pos[0]) && Number.isFinite(cam.pos[1]),
                 () => `T3.storm(${boundsNone ? 'NONE' : 'HARD'}): pos went non-finite at frame ${f} (${cam.pos[0]},${cam.pos[1]})`);
             check(Number.isFinite(cam.zoom) && cam.zoom > 0,
@@ -95,7 +95,7 @@ export async function run() {
     // the storm, pumping must produce SILENCE (no live ticker re-requesting) and
     // the camera must remain finite.
     {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 7);
+        const cam = makeCam(800, 600, 3200, 2400, 7);
         const SPAM = 1000;
         for (let i = 0; i < SPAM; i++) {
             const seq = cam.createSequence({ blendOutTime: (i & 1) ? 0 : 0.3 })

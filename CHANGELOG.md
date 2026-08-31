@@ -6,6 +6,101 @@ Versioning. Version lives in three places at once -- `package.json`, the
 `VERSION` const in `src/index.js`, and the `Version:` header in `llms.txt` --
 bumped together or not at all.
 
+## [2.0.0] -- 2026-08-31
+
+The detach. A bundler cannot drop a reachable class method, so every camera a
+single-file HTML consumer shipped carried four subsystems it never called --
+`DebugHUD.js`, `CameraSequence.js`, `ParallaxManager.js`, `ShakePresets.js` --
+plus all of `@zakkster/lite-timeline`, and two state objects (`_parallax`,
+`debugConfig`) built in every constructor (CP-21, CP-22). This release severs all
+four import edges from `CinematicCameraPro.js` and from the root barrel, replaces
+them with per-instance opt-in attach on the subpaths, and proves absence with a
+static import-graph walk plus literal probes rather than identifier probes
+(CP-23). No attached or core path changes behavior -- packaging, again. It is a
+MAJOR because the "." entry loses >35% of its gz weight and a class-only consumer
+that wants 1.x behavior must add three `withX` lines.
+
+**Deliberate size drop -- read this if an artifact-size gate just fired.** The
+"." bundle went **24.49 KB -> 15.62 KB gz** (raw 97.43 KB -> 61.47 KB), a ~36%
+drop, because a class-only consumer no longer bundles the four subsystems or
+`lite-timeline`. If your build gates artifact size against the published README
+figure, THAT GATE FIRING IS THE GATE WORKING: bump your expected size on the same
+commit you take 2.0.0. Dead weight removed for a class-only consumer: **44,316 B**
+of subsystem source (`DebugHUD.js` 9,100 + `CameraSequence.js` 23,421 +
+`ParallaxManager.js` 6,262 + `ShakePresets.js` 5,533) plus `lite-timeline`
+11,151 B. These figures supersede the brief's 38,578 B / 17,683 B: those predate
+PRO3, which grew `CameraSequence.js` from 17,683 B to 23,421 B (blend-out,
+completion cleanup, the `at:` grammar). The measured "." weight in this file, the
+README and `llms.txt` all come from one `node test/size.mjs` run.
+
+### Added
+
+- **Per-instance attach on the subpaths.** `withParallax(cam)` (`./parallax`),
+  `withSequences(cam)` (`./sequence`), `withDebug(cam)` (new `./debug`). Each
+  installs the subsystem's real methods as own-properties on that one instance
+  (never prototype mutation -- two cameras in a page attach independently),
+  returns `cam` for chaining, and is single-shot: a second attach throws
+  `ERR_ALREADY_ATTACHED`. `destroy()` is the only exit, and destroyed beats
+  unattached. See `decisions/0004-detach.md`.
+- **New `./debug` subpath** (`DebugHUD.js`): `createDebugHUDConfig`,
+  `drawDebugHUD`, `drawDebugWorld`, `withDebug`, plus `DebugHUD.d.ts`.
+- **Fail-closed stubs (D3).** A detached subsystem method called before its
+  `withX` throws a named error whose message names the exact import + call that
+  fixes it: `ERR_PARALLAX_NOT_ATTACHED`, `ERR_SEQUENCE_NOT_ATTACHED`,
+  `ERR_DEBUG_NOT_ATTACHED` -- never a raw `TypeError`, never a silent no-op.
+- **Detach gates.** `test/import-graph.test.js` (G1: static graph walk, both
+  directions), `test/bundle-literals.test.js` (G2: literal probes into a scratch
+  bundle), `test/consumer-tripple.test.js` (G4: the class-only surface with zero
+  attach), and a `.`/`./debug` ceiling in `test/size.mjs` (G3).
+
+### Changed
+
+- **Root "." surface trimmed to exactly 20 names** (D5): `VERSION`,
+  `CinematicCameraPro`, `default`, `FollowMode`, `FOLLOW_STRATEGIES`,
+  `createMultiTargetState`, `updateMultiTarget`, `createShakeState`, `addShake`,
+  `addTraumaSimple`, `updateShake`, `computeShake`, `clearShakes`, `BoundsType`,
+  `createBoundsState`, `setBoundsAll`, `setBoundsEdges`, `setBoundsRect`,
+  `clearBoundsRect`, `applyBounds`. Presets, sequence factories, parallax
+  functions and the debug draws are reached on `./shake`, `./sequence`,
+  `./parallax`, `./debug`.
+- **Constructor allocates no parallax/debug state.** `cam._parallax === null` and
+  `cam.debugConfig === null` on a fresh camera; `update()` step 7 tolerates the
+  null with a single compare measured at ~2 ns/frame over the ~40 ns body
+  (`decisions/0004-detach.md`, D2). `withParallax`/`withDebug` build the state.
+
+### Removed
+
+- **`cam.shakePreset(name, intensity)`** -- dropped from the prototype at the
+  major, no throwing tombstone (absence is the honest signal). `typeof
+  cam.shakePreset === 'undefined'`.
+
+### Fixed
+
+- **QA-2:** `withDebug(cam)` without `withParallax` no longer raw-`TypeError`s in
+  `cam.debugHUD()`. `drawDebugHUD` now guards both `cam._parallax` reads with
+  `!== null` (CP-22) -- a null parallax simply skips the HUD's parallax panel.
+- **QA-1:** attaching to a destroyed camera is now uniform. `withParallax`,
+  `withSequences` and `withDebug` detect a corpse first (`Object.hasOwn(cam,
+  'update')`, the own-property `destroy()` stamps) and throw
+  `ERR_CAMERA_DESTROYED` -- no more silent zombie re-attach over the `_dead`
+  sentinels (parallax/debug) and no more misleading `ERR_ALREADY_ATTACHED`
+  (sequences). Live double-attach still throws `ERR_ALREADY_ATTACHED`. (QA.)
+
+### Migration (all idioms compile)
+
+| 1.x | 2.0.0 |
+| --- | --- |
+| `cam.shakePreset(name, i)` | `import { getPreset } from '@zakkster/lite-camera-pro/shake';`<br>`const p = getPreset(name); if (p) cam.shake(p, i);` |
+| `cam.createSequence(opts)` | `import { withSequences } from '@zakkster/lite-camera-pro/sequence';`<br>`withSequences(cam); cam.createSequence(opts);`<br>_or_ `import { createCameraSequence } from '@zakkster/lite-camera-pro/sequence';`<br>`createCameraSequence(cam, opts);` |
+| `cam.addParallaxLayer(...)` / `removeParallaxLayer` / `applyParallax` | `import { withParallax } from '@zakkster/lite-camera-pro/parallax';`<br>`withParallax(cam);` then the call sites are unchanged |
+| `cam.debug(ctx)` / `cam.debugHUD(ctx)` | `import { withDebug } from '@zakkster/lite-camera-pro/debug';`<br>`withDebug(cam);` then the call sites are unchanged |
+| `import { getPreset, createCameraSequence, createParallaxState, drawDebugHUD } from '@zakkster/lite-camera-pro';` | import the removed names from `./shake`, `./sequence`, `./parallax`, `./debug` |
+
+The `getPreset` guard is MANDATORY: `getPreset` returns `null` on an unknown name
+and `cam.shake(null)` throws, so the `if (p)` guard preserves the pre-2.0.0
+documented no-op-on-unknown-name. Adding a null door to `cam.shake` is out of
+scope (a behavior change to an attached path), ledgered as CP-25 -> PRO4.
+
 ## [1.3.0] -- 2026-08-31
 
 Sequence integrity. Three reproduced sequence defects are closed and the one

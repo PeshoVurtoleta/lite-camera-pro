@@ -9,7 +9,13 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { CinematicCameraPro, FollowMode, BoundsType } from '../src/index.js';
-import './helpers.mjs'; // installs the RAF polyfill for the sequence tests
+import { attachAll } from './helpers.mjs'; // installs the RAF polyfill + v2.0.0 attach
+import { getPreset } from '../src/ShakePresets.js';
+
+// v2.0.0 detach: shakePreset() was dropped at the major. Replay it through the
+// D4 migration idiom (getPreset from ./shake, guarded, then shake) so these
+// behavioral assertions stay byte-identical.
+const shakePreset = (cam, name, i) => { const p = getPreset(name); if (p) cam.shake(p, i); };
 
 /** vitest's toBeCloseTo(y, digits): |actual - expected| < 10^-digits / 2. */
 function close(actual, expected, digits = 2) {
@@ -18,7 +24,7 @@ function close(actual, expected, digits = 2) {
 
 describe('CinematicCameraPro', () => {
     let cam;
-    beforeEach(() => { cam = new CinematicCameraPro(800, 600, 3200, 2400); });
+    beforeEach(() => { cam = attachAll(new CinematicCameraPro(800, 600, 3200, 2400)); });
 
     // ----------------------------------------------------------------------
     describe('Initialization & Core State', () => {
@@ -264,8 +270,8 @@ describe('CinematicCameraPro', () => {
         });
 
         it('stacks preset shakes into separate slots', () => {
-            cam.shakePreset('explosion');
-            cam.shakePreset('recoil');
+            shakePreset(cam, 'explosion');
+            shakePreset(cam, 'recoil');
             assert.equal(cam._shake.slots[0].active, true);
             assert.equal(cam._shake.slots[1].active, true);
             assert.equal(cam._shake.slots[1].isDirectional, true);
@@ -285,8 +291,8 @@ describe('CinematicCameraPro', () => {
         });
 
         it('clears all shakes', () => {
-            cam.shakePreset('explosion');
-            cam.shakePreset('recoil');
+            shakePreset(cam, 'explosion');
+            shakePreset(cam, 'recoil');
             cam.clearShakes();
             assert.equal(cam._shake.active, false);
             assert.equal(cam._shake.slots[0].active, false);
@@ -314,7 +320,7 @@ describe('CinematicCameraPro', () => {
         });
 
         it('unknown preset name is ignored', () => {
-            cam.shakePreset('nonexistent');
+            shakePreset(cam, 'nonexistent');
             assert.equal(cam._shake.active, false);
         });
 
@@ -476,7 +482,7 @@ describe('CinematicCameraPro', () => {
         it('round-trips getState to setState', () => {
             cam.pos[0] = 555; cam.zoom = 1.75;
             const snap = cam.getState();
-            const cam2 = new CinematicCameraPro(800, 600, 3200, 2400);
+            const cam2 = attachAll(new CinematicCameraPro(800, 600, 3200, 2400));
             cam2.setState(snap);
             assert.equal(cam2.pos[0], 555);
             assert.equal(cam2.zoom, 1.75);

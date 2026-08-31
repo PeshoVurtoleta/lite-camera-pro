@@ -15,19 +15,30 @@
 // =============================================================================
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+// v2.0.0 detach: only the 20-name root surface (D5) still resolves from '.'.
+// The four detached subsystems are imported from their own module files (the
+// same files the ./debug, ./shake, ./parallax, ./sequence subpaths target --
+// one runtime identity, no fork).
 import {
     CinematicCameraPro,
-    createDebugHUDConfig, drawDebugHUD, drawDebugWorld,
-    EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT,
-    getPreset, registerPreset, listPresets,
     createShakeState, computeShake, addShake, addTraumaSimple, updateShake, clearShakes,
-    createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax,
-    getLayerScroll, applyParallaxLayer,
     BoundsType, createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect,
     createMultiTargetState, updateMultiTarget,
-    createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake,
 } from '../src/index.js';
-import { makeCtx } from './helpers.mjs';
+import { createDebugHUDConfig, drawDebugHUD, drawDebugWorld } from '../src/DebugHUD.js';
+import {
+    EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT,
+    getPreset, registerPreset, listPresets,
+} from '../src/ShakePresets.js';
+import {
+    createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax,
+    getLayerScroll, applyParallaxLayer,
+} from '../src/ParallaxManager.js';
+import { createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake } from '../src/CameraSequence.js';
+import { makeCtx, attachAll } from './helpers.mjs';
+
+// v2.0.0: shakePreset() dropped -- replay via the D4 idiom for the facade tests.
+const shakePreset = (cam, name, i) => { const p = getPreset(name); if (p) cam.shake(p, i); };
 
 /** vitest's toBeCloseTo(y, digits): |actual - expected| < 10^-digits / 2. */
 function close(actual, expected, digits = 2) {
@@ -36,7 +47,7 @@ function close(actual, expected, digits = 2) {
 
 describe('DebugHUD', () => {
     let cam;
-    beforeEach(() => { cam = new CinematicCameraPro(800, 600, 3200, 2400); });
+    beforeEach(() => { cam = attachAll(new CinematicCameraPro(800, 600, 3200, 2400)); });
 
     it('createDebugHUDConfig returns a toggleable panel config', () => {
         const cfg = createDebugHUDConfig();
@@ -81,7 +92,7 @@ describe('DebugHUD', () => {
     });
 
     it('HUD renders while a shake is active', () => {
-        cam.shakePreset('explosion');
+        shakePreset(cam, 'explosion');
         cam.update(0.016, 400, 300, 0, 0);
         const ctx = makeCtx();
         assert.doesNotThrow(() => cam.debugHUD(ctx));
@@ -270,7 +281,7 @@ describe('Functional bounds API', () => {
 
 describe('Sequence preset helpers', () => {
     let cam;
-    beforeEach(() => { cam = new CinematicCameraPro(800, 600, 3200, 2400); });
+    beforeEach(() => { cam = attachAll(new CinematicCameraPro(800, 600, 3200, 2400)); });
 
     it('panTo returns a playable sequence', () => {
         const seq = panTo(cam, 400, 300, 800);
@@ -311,7 +322,7 @@ describe('Sequence preset helpers', () => {
 
 describe('Multi-target state + updater (direct from entry)', () => {
     let cam;
-    beforeEach(() => { cam = new CinematicCameraPro(800, 600, 3200, 2400); });
+    beforeEach(() => { cam = attachAll(new CinematicCameraPro(800, 600, 3200, 2400)); });
 
     it('createMultiTargetState builds an inactive default config (CP-1: now on the entry)', () => {
         const mt = createMultiTargetState();

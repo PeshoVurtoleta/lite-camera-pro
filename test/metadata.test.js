@@ -38,26 +38,34 @@ test('files[] ships CHANGELOG.md + llms.txt and excludes test/demo/examples/Cook
     }
 });
 
-// CP-1 guard (documented -> exists). The standalone functional API llms.txt documents
-// (lines under "## Standalone functional API") must all be reachable from the
-// entry -- this is the finding that shipped one file too low.
-const DOCUMENTED_STANDALONE = [
-    // Shake
+// CP-1 guard (documented -> exists). v2.0.0 detach (D5): the standalone API is
+// now split. The ROOT_STANDALONE names still resolve on the "." entry; the four
+// detached subsystems document their standalone API on their subpaths, so each
+// SUBPATH_STANDALONE name must resolve THERE (documented -> exists, at its new
+// home). Both are asserted so a doc that promises a name at the wrong location
+// fails closed.
+const ROOT_STANDALONE = [
+    // Shake engine (stays at ".")
     'createShakeState', 'addShake', 'addTraumaSimple', 'updateShake', 'computeShake', 'clearShakes',
-    // Parallax
-    'createParallaxState', 'addParallaxLayer', 'removeParallaxLayer', 'updateParallax', 'getLayerScroll', 'applyParallaxLayer',
-    // Bounds
+    // Bounds (stays at ".")
     'createBoundsState', 'setBoundsAll', 'setBoundsEdges', 'setBoundsRect', 'clearBoundsRect', 'applyBounds',
-    // Multi
+    // Multi (stays at ".")
     'createMultiTargetState', 'updateMultiTarget',
-    // Sequence
-    'createCameraSequence', 'panTo', 'dramaticZoom', 'bossReveal', 'timedShake',
-    // Enums
-    'FollowMode', 'FOLLOW_STRATEGIES', 'BoundsType', 'WrapMode',
+    // Enums that stay at "."
+    'FollowMode', 'FOLLOW_STRATEGIES', 'BoundsType',
 ];
 
-test('CP-1: every llms.txt-documented standalone export exists on the entry', () => {
-    for (const name of DOCUMENTED_STANDALONE) {
+// Detached standalone APIs, each at its subpath (v2.0.0).
+const SUBPATH_STANDALONE = {
+    '/shake': ['getPreset', 'registerPreset', 'listPresets'],
+    '/parallax': ['WrapMode', 'createParallaxState', 'addParallaxLayer', 'removeParallaxLayer',
+        'updateParallax', 'getLayerScroll', 'applyParallaxLayer', 'withParallax'],
+    '/sequence': ['createCameraSequence', 'panTo', 'dramaticZoom', 'bossReveal', 'timedShake', 'withSequences'],
+    '/debug': ['createDebugHUDConfig', 'drawDebugHUD', 'drawDebugWorld', 'withDebug'],
+};
+
+test('CP-1: every llms.txt-documented ROOT standalone export exists on the entry', () => {
+    for (const name of ROOT_STANDALONE) {
         assert.ok(name in api, 'entry is missing documented export: ' + name);
     }
     // The two the BRIEF flagged, specifically, as functions.
@@ -65,14 +73,24 @@ test('CP-1: every llms.txt-documented standalone export exists on the entry', ()
     assert.equal(typeof api.createMultiTargetState, 'function');
 });
 
+test('CP-1 (v2.0.0): every documented DETACHED standalone export exists on its subpath', async () => {
+    for (const [sub, names] of Object.entries(SUBPATH_STANDALONE)) {
+        const mod = await import('@zakkster/lite-camera-pro' + sub);
+        for (const name of names) {
+            assert.ok(name in mod, 'subpath ' + sub + ' is missing documented export: ' + name);
+        }
+    }
+});
+
 // -- CP-16a / CP-17: subpath exports-map invariants (v1.1.0) -------------------
 // The "." entry keeps its exact 1.0.1 shape; every subpath's runtime target
 // (import/default/node) AND its types target resolve to a real file on disk;
 // the "./package.json" convenience subpath is present.
 
+// v2.0.0 detach: ./debug is the new subpath (DebugHUD.js, no longer a "." facade).
 const EXPECTED_SUBPATHS = [
     '.', './shake', './parallax', './bounds', './multi', './follow',
-    './sequence', './package.json',
+    './sequence', './debug', './package.json',
 ];
 
 test('exports map lists exactly the expected subpaths', () => {

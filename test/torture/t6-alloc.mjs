@@ -20,7 +20,7 @@
 
 import { GcProfiler, checkNoGc } from '@zakkster/lite-gc-profiler';
 import { CinematicCameraPro } from '../../src/index.js';
-import { BREAK, noopSink, die } from './harness.mjs';
+import { BREAK, noopSink, die, makeCam, shakePreset } from './harness.mjs';
 
 const HOT = 200000;
 
@@ -29,10 +29,10 @@ const retained = [];
 
 export async function run() {
     // WIRE: steady-state camera allocated OUTSIDE the loop, stepped inside.
-    const cam = new CinematicCameraPro(800, 600, 4000, 4000, 42);
+    const cam = makeCam(800, 600, 4000, 4000, 42);
     cam.addParallaxLayer('sky', 0.2);
     cam.addParallaxLayer('mid', 0.6);
-    cam.shakePreset('explosion');
+    shakePreset(cam, 'explosion');
 
     // Identity witnesses: these references must not change across the window.
     const slotsRef = cam._shake.slots;
@@ -64,7 +64,7 @@ export async function run() {
         if (cam._blendRemain > 0) blendFrames++;
         cam.update(1 / 60, 1000 + (i & 1023), 800 + (i & 511), 1, 0);
         // Keep the shake branch hot: re-arm the moment it sleeps.
-        if (!cam._shake.active) cam.shakePreset('explosion');
+        if (!cam._shake.active) shakePreset(cam, 'explosion');
         cam.apply(noopSink);
         cam.applyParallax('mid', noopSink);
         if (BREAK && (i & 31) === 0) retained.push(new Float64Array(512));

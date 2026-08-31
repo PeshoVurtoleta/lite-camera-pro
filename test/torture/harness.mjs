@@ -22,6 +22,22 @@
  * @license MIT
  */
 
+// -- v2.0.0 detach attach helpers -------------------------------------------
+// The class ships parallax/sequence/debug as fail-closed stubs; the torture
+// tiers exercise the attached surface, so they attach all three at construction.
+// shakePreset() was dropped at the major -- shakePreset() here replays the D4
+// migration idiom (getPreset from ./shake, guarded, then shake) so tier bodies
+// stay byte-identical in intent.
+import { CinematicCameraPro } from '../../src/index.js';
+import { withParallax } from '../../src/ParallaxManager.js';
+import { withSequences } from '../../src/CameraSequence.js';
+import { withDebug } from '../../src/DebugHUD.js';
+import { getPreset } from '../../src/ShakePresets.js';
+
+export function attachAll(cam) { return withDebug(withSequences(withParallax(cam))); }
+export function makeCam(...args) { return attachAll(new CinematicCameraPro(...args)); }
+export function shakePreset(cam, name, i) { const p = getPreset(name); if (p) cam.shake(p, i); }
+
 // -- seed (replayable) ------------------------------------------------------
 /** Seed for every PRNG in the run. Override with TORTURE_SEED for replay. */
 export const SEED = (() => {

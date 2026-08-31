@@ -1,46 +1,40 @@
 /**
  * @zakkster/lite-camera-pro -- TypeScript declarations (main entry).
  *
- * The full functional layer is re-exported from the per-subsystem sibling
- * declarations (one declaration per type -- no duplicates). This file adds the
- * CinematicCameraPro class, the debug-HUD facade, and the VERSION const.
+ * v2.0.0 detach (CP-21/CP-22/CP-23): the "." surface is exactly the 20 runtime
+ * names the class itself reaches (D5). The four detached subsystems -- presets
+ * (./shake), sequences (./sequence), parallax (./parallax), debug (./debug) --
+ * are NOT re-exported here; reach them on their subpaths. This file adds the
+ * CinematicCameraPro class and the VERSION const.
  */
 
-// -- Functional layer (mirrors the ./shake, ./parallax, ./bounds, ./multi,
-//    ./follow, ./sequence subpaths; same runtime identities) --
-export * from './Shake.js';
-export * from './ParallaxManager.js';
+// -- Functional layer at "." (exactly the runtime barrel: shake engine, multi,
+//    follow, bounds; NOT presets/sequence/parallax/debug -- those are subpaths) --
+export {
+    createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes,
+} from './Shake.js';
 export * from './BoundsSystem.js';
 export * from './MultiTarget.js';
 export * from './FollowMode.js';
-export * from './CameraSequence.js';
 
 // -- Types needed locally by the class declaration --
 import type { ShakeProfile } from './Shake.js';
 import type { Vec2, MultiTargetOptions } from './MultiTarget.js';
 import type { BoundsEdgesConfig } from './BoundsSystem.js';
 import type { CameraSequence, CameraSequenceOptions } from './CameraSequence.js';
+import type { DebugHUDConfig } from './DebugHUD.js';
 
-// -- Debug HUD (DebugHUD.js) -- facade only, no dedicated subpath --
-export interface DebugHUDConfig {
-    show: {
-        position: boolean;
-        zoom: boolean;
-        mode: boolean;
-        shake: boolean;
-        sequence: boolean;
-        parallax: boolean;
-        bounds: boolean;
-        deadzone: boolean;
-        lookahead: boolean;
-    };
-    x: number;
-    y: number;
-}
-
-export declare function createDebugHUDConfig(): DebugHUDConfig;
-export declare function drawDebugHUD(cam: CinematicCameraPro, ctx: CanvasRenderingContext2D, config?: DebugHUDConfig): void;
-export declare function drawDebugWorld(cam: CinematicCameraPro, ctx: CanvasRenderingContext2D, config?: DebugHUDConfig): void;
+/**
+ * Error codes a class-only camera can throw for the detached subsystems
+ * (v2.0.0). A subsystem method called before its withX() attach throws the
+ * matching NOT_ATTACHED code; a second withX() throws ERR_ALREADY_ATTACHED.
+ * After destroy() every method throws ERR_CAMERA_DESTROYED instead.
+ */
+export type CameraAttachErrorCode =
+    | "ERR_PARALLAX_NOT_ATTACHED"
+    | "ERR_SEQUENCE_NOT_ATTACHED"
+    | "ERR_DEBUG_NOT_ATTACHED"
+    | "ERR_ALREADY_ATTACHED";
 
 // -- Package version (bumped in lockstep with package.json + llms.txt) --
 export declare const VERSION: string;
@@ -82,7 +76,8 @@ export declare class CinematicCameraPro {
      */
     maxDt: number;
 
-    debugConfig: DebugHUDConfig;
+    /** null until withDebug() attaches (v2.0.0 detach); the constructor no longer builds it. */
+    debugConfig: DebugHUDConfig | null;
 
     // Follow mode
     /** @throws Error `code = "ERR_CAMERA_MODE"` if mode is not an integer FollowMode in range. */
@@ -98,11 +93,14 @@ export declare class CinematicCameraPro {
     // Shake
     addTrauma(amount: number): this;
     shake(profile: ShakeProfile, intensity?: number): this;
-    shakePreset(name: string, intensity?: number): this;
     clearShakes(): this;
 
-    // Sequences
-    /** @throws Error `code = "ERR_SEQUENCE_OPTIONS"` if options.blendOutTime is non-finite or negative. */
+    // Sequences (createSequence is a fail-closed stub until withSequences attaches)
+    /**
+     * @throws Error `code = "ERR_SEQUENCE_NOT_ATTACHED"` until withSequences()
+     *   from '@zakkster/lite-camera-pro/sequence' installs the real method; once
+     *   attached, `code = "ERR_SEQUENCE_OPTIONS"` if blendOutTime is invalid.
+     */
     createSequence(options?: CameraSequenceOptions): CameraSequence;
     playSequence(seq: CameraSequence): this;
     stopSequence(): this;
@@ -118,9 +116,12 @@ export declare class CinematicCameraPro {
     screenToWorld(sx: number, sy: number, out: Vec2): Vec2;
     worldToScreen(wx: number, wy: number, out: Vec2): Vec2;
 
-    // Parallax
+    // Parallax (fail-closed stubs until withParallax from '.../parallax' attaches)
+    /** @throws Error `code = "ERR_PARALLAX_NOT_ATTACHED"` until withParallax() attaches. */
     addParallaxLayer(id: string, speedX: number, speedY?: number, opts?: { offsetX?: number; offsetY?: number; wrap?: number }): this;
+    /** @throws Error `code = "ERR_PARALLAX_NOT_ATTACHED"` until withParallax() attaches. */
     removeParallaxLayer(id: string): this;
+    /** @throws Error `code = "ERR_PARALLAX_NOT_ATTACHED"` until withParallax() attaches. */
     applyParallax(id: string, ctx: CanvasRenderingContext2D): boolean;
 
     // Bounds
@@ -139,8 +140,10 @@ export declare class CinematicCameraPro {
     update(dt: number, px: number, py: number, pvx?: number, pvy?: number): void;
     apply(ctx: CanvasRenderingContext2D): void;
 
-    // Debug
+    // Debug (fail-closed stubs until withDebug from '.../debug' attaches)
+    /** @throws Error `code = "ERR_DEBUG_NOT_ATTACHED"` until withDebug() attaches. */
     debug(ctx: CanvasRenderingContext2D): void;
+    /** @throws Error `code = "ERR_DEBUG_NOT_ATTACHED"` until withDebug() attaches. */
     debugHUD(ctx: CanvasRenderingContext2D): void;
 
     // Save / load

@@ -610,4 +610,38 @@ export function timedShake(cam, presetOrProfile, holdMs = 500, opts) {
         .wait(holdMs);
 }
 
+/**
+ * Attach the sequence factory to one camera (v2.0.0 detach, CP-21/D1).
+ * Only createSequence() was entangled -- every _seq site duck-types and
+ * playSequence() already accepts any ./sequence-built sequence. Restores it
+ * per-instance (own-property, one cold closure). Single-shot: a second attach
+ * throws ERR_ALREADY_ATTACHED. With no attach, call createCameraSequence(cam,
+ * opts) directly.
+ *
+ * @param {Object} cam  A CinematicCameraPro instance
+ * @returns {Object} cam, for chaining
+ * @throws {Error} code "ERR_ALREADY_ATTACHED" if sequences are already attached
+ */
+export function withSequences(cam) {
+    // Destroyed beats unattached (QA-1): destroy() stamps createSequence = _dead
+    // as an own-property too, so the already-attached check below would throw the
+    // WRONG code (ERR_ALREADY_ATTACHED) on a corpse. Detect destroyed FIRST via
+    // Object.hasOwn(cam, 'update') (destroy() rebinds update as an own-property).
+    if (Object.hasOwn(cam, 'update')) {
+        const e = new Error("CinematicCameraPro: use after destroy()");
+        e.code = "ERR_CAMERA_DESTROYED";
+        throw e;
+    }
+    if (Object.prototype.hasOwnProperty.call(cam, 'createSequence')) {
+        const e = new Error("CinematicCameraPro: sequences already attached. " +
+            "withSequences(camera) is per-instance and single-shot.");
+        e.code = "ERR_ALREADY_ATTACHED";
+        throw e;
+    }
+    cam.createSequence = function (options) {
+        return createCameraSequence(this, options);
+    };
+    return cam;
+}
+
 export default createCameraSequence;

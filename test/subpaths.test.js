@@ -43,6 +43,7 @@ const EXPECTED_KEYS = {
     './parallax': [
         'WrapMode', 'createParallaxState', 'addParallaxLayer', 'removeParallaxLayer',
         'updateParallax', 'getLayerScroll', 'applyParallaxLayer',
+        'withParallax', // v2.0.0 detach: the per-instance attach lives here
     ],
     './bounds': [
         'BoundsType', 'createBoundsState', 'setBoundsAll', 'setBoundsEdges',
@@ -50,7 +51,12 @@ const EXPECTED_KEYS = {
     ],
     './multi': ['createMultiTargetState', 'updateMultiTarget'],
     './follow': ['FollowMode', 'FOLLOW_STRATEGIES'],
-    './sequence': ['createCameraSequence', 'panTo', 'dramaticZoom', 'bossReveal', 'timedShake'],
+    './sequence': [
+        'createCameraSequence', 'panTo', 'dramaticZoom', 'bossReveal', 'timedShake',
+        'withSequences', // v2.0.0 detach: the per-instance attach lives here
+    ],
+    // v2.0.0 detach: the new ./debug subpath (DebugHUD.js), no longer a "." facade.
+    './debug': ['createDebugHUDConfig', 'drawDebugHUD', 'drawDebugWorld', 'withDebug'],
 };
 
 for (const [sub, keys] of Object.entries(EXPECTED_KEYS)) {
@@ -64,25 +70,24 @@ for (const [sub, keys] of Object.entries(EXPECTED_KEYS)) {
     });
 }
 
-test("'.' entry export-name set is unchanged from the frozen 1.0.1 surface (+ VERSION value)", () => {
-    // Independent re-derivation of t8-cross.mjs's FROZEN_1_0_1 array (kept in
-    // sync deliberately -- if one drifts without the other, THIS test or the
-    // torture tier will catch it; they must never both be edited blind).
-    const FROZEN_1_0_1 = [
-        'BoundsType', 'CinematicCameraPro', 'DAMAGE', 'EARTHQUAKE', 'EXPLOSION',
-        'FOLLOW_STRATEGIES', 'FollowMode', 'HEAVY_IMPACT', 'IMPACT', 'LANDING',
-        'RECOIL', 'RUMBLE', 'VERSION', 'WrapMode', 'addParallaxLayer', 'addShake',
-        'addTraumaSimple', 'applyBounds', 'applyParallaxLayer', 'bossReveal',
-        'clearBoundsRect', 'clearShakes', 'computeShake', 'createBoundsState',
-        'createCameraSequence', 'createDebugHUDConfig', 'createMultiTargetState',
-        'createParallaxState', 'createShakeState', 'default', 'dramaticZoom',
-        'drawDebugHUD', 'drawDebugWorld', 'getLayerScroll', 'getPreset',
-        'listPresets', 'panTo', 'registerPreset', 'removeParallaxLayer',
-        'setBoundsAll', 'setBoundsEdges', 'setBoundsRect', 'timedShake',
-        'updateMultiTarget', 'updateParallax', 'updateShake',
+test("'.' entry export-name set is exactly D5's 20-name detach surface (+ VERSION value)", () => {
+    // v2.0.0 detach (D5): the "." surface is trimmed to exactly the 20 names the
+    // class itself reaches -- the four subsystems (presets/sequence/parallax/
+    // debug) left the barrel for their subpaths. Kept in sync with t8-cross.mjs's
+    // ROOT_2_0_0 snapshot; if one drifts without the other, THIS test or the
+    // torture tier catches it. They must never both be edited blind.
+    const ROOT_2_0_0 = [
+        'VERSION', 'CinematicCameraPro', 'default',
+        'FollowMode', 'FOLLOW_STRATEGIES',
+        'createMultiTargetState', 'updateMultiTarget',
+        'createShakeState', 'addShake', 'addTraumaSimple', 'updateShake',
+        'computeShake', 'clearShakes',
+        'BoundsType', 'createBoundsState', 'setBoundsAll', 'setBoundsEdges',
+        'setBoundsRect', 'clearBoundsRect', 'applyBounds',
     ];
-    assert.deepEqual(Object.keys(mainEntry).sort(), [...FROZEN_1_0_1].sort());
-    assert.equal(MAIN_VERSION, '1.3.0');
+    assert.equal(ROOT_2_0_0.length, 20);
+    assert.deepEqual(Object.keys(mainEntry).sort(), [...ROOT_2_0_0].sort());
+    assert.equal(MAIN_VERSION, '2.0.0');
 });
 
 // -----------------------------------------------------------------------------
@@ -296,19 +301,46 @@ test('H-B no-fork: main entry and ./shake expose the SAME createShakeState ident
     assert.equal(Object.is(mainEntry.createShakeState, shakeSubpath.createShakeState), true);
 });
 
-test('H-B no-fork: main entry and ./shake expose the SAME getPreset identity', async () => {
-    const shakeSubpath = await import('@zakkster/lite-camera-pro/shake');
-    assert.equal(Object.is(mainEntry.getPreset, shakeSubpath.getPreset), true);
+// v2.0.0 detach (CP-22): getPreset/createParallaxState/createCameraSequence left
+// the "." barrel, so the old root-vs-subpath identity check no longer applies to
+// them. The no-fork law (H-B) is preserved in a stronger form: the attach fn is
+// COLOCATED in the same module as the subsystem's factory, so the class cannot
+// build a second, forked state shape -- an attached camera's state is byte-shape
+// identical to what the subpath factory produces.
+test('H-B no-fork (CP-22): the "." barrel no longer re-exports the detached factories', async () => {
+    assert.equal('getPreset' in mainEntry, false, 'getPreset must leave "." for ./shake');
+    assert.equal('createParallaxState' in mainEntry, false, 'createParallaxState must leave "." for ./parallax');
+    assert.equal('createCameraSequence' in mainEntry, false, 'createCameraSequence must leave "." for ./sequence');
 });
 
-// Extended past the plan's minimum: the same no-fork proof for every other
-// subpath's primary factory, so the guarantee is not shake-specific.
+test('H-B no-fork (CP-22): withParallax colocates with createParallaxState; attached state matches the subpath shape', async () => {
+    const parallax = await import('@zakkster/lite-camera-pro/parallax');
+    assert.equal(typeof parallax.withParallax, 'function', 'withParallax ships FROM the ParallaxManager module');
+    const cam = parallax.withParallax(new CinematicCameraPro(800, 600, 3200, 2400));
+    const reference = parallax.createParallaxState();
+    // Same own-key set + same layerCount -> one state shape, no fork.
+    assert.deepEqual(Object.keys(cam._parallax).sort(), Object.keys(reference).sort());
+    assert.equal(cam._parallax.layerCount, reference.layerCount);
+});
+
+test('H-B no-fork (CP-22): withSequences colocates with createCameraSequence; the built sequence matches the factory shape', async () => {
+    const sequence = await import('@zakkster/lite-camera-pro/sequence');
+    assert.equal(typeof sequence.withSequences, 'function', 'withSequences ships FROM the CameraSequence module');
+    const cam = sequence.withSequences(new CinematicCameraPro(800, 600, 3200, 2400));
+    const viaAttach = cam.createSequence();
+    const viaFactory = sequence.createCameraSequence(cam);
+    // Same own-key surface -> the attach path builds the SAME sequence object.
+    assert.deepEqual(Object.keys(viaAttach).sort(), Object.keys(viaFactory).sort());
+    viaAttach.destroy();
+    viaFactory.destroy();
+});
+
+// The subpaths whose primary factory STILL lives at "." keep the exact identity
+// proof (same runtime function object, root vs subpath).
 const IDENTITY_CHECKS = [
-    ['./parallax', 'createParallaxState'],
     ['./bounds', 'createBoundsState'],
     ['./multi', 'createMultiTargetState'],
     ['./follow', 'FollowMode'],
-    ['./sequence', 'createCameraSequence'],
 ];
 for (const [sub, name] of IDENTITY_CHECKS) {
     test('H-B no-fork: main entry and ' + sub + ' expose the SAME ' + name + ' identity', async () => {

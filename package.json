@@ -1,7 +1,7 @@
 {
   "name": "@zakkster/lite-camera-pro",
   "author": "Zahary Shinikchiev <shinikchiev@yahoo.com>",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "description": "Cinematic camera system for Canvas2D games. Zero-GC, multi-target framing, noise-based shake, and timeline sequences.",
   "type": "module",
   "sideEffects": false,
@@ -49,6 +49,12 @@
       "node": "./src/CameraSequence.js",
       "import": "./src/CameraSequence.js",
       "default": "./src/CameraSequence.js"
+    },
+    "./debug": {
+      "types": "./src/DebugHUD.d.ts",
+      "node": "./src/DebugHUD.js",
+      "import": "./src/DebugHUD.js",
+      "default": "./src/DebugHUD.js"
     },
     "./package.json": "./package.json"
   },

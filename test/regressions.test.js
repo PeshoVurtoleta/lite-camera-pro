@@ -14,7 +14,8 @@ import {
     createMultiTargetState,
 } from '../src/index.js';
 import { PUBLIC_METHODS, callByName } from './torture/public-surface.mjs';
-import { pumpRaf, rafCount } from './helpers.mjs'; // RAF polyfill + pump (CP-5)
+import { pumpRaf, rafCount, makeCam } from './helpers.mjs'; // RAF polyfill + pump (CP-5) + v2.0.0 attach
+import { getPreset } from '../src/ShakePresets.js'; // v2.0.0: presets moved to ./shake
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -57,7 +58,7 @@ test('CP-1: standalone constructors are importable from the package entry', () =
 //   (code undefined) here -> fails (anti-vacuity).
 // -----------------------------------------------------------------------------
 test('CP-8: EVERY public method throws ERR_CAMERA_DESTROYED after destroy()', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400);
+    const cam = makeCam(800, 600, 3200, 2400);
     cam.destroy();
 
     for (const name of PUBLIC_METHODS) {
@@ -70,7 +71,7 @@ test('CP-8: EVERY public method throws ERR_CAMERA_DESTROYED after destroy()', ()
 });
 
 test('CP-8: double destroy() throws ERR_CAMERA_DESTROYED', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400);
+    const cam = makeCam(800, 600, 3200, 2400);
     cam.destroy();
     assert.throws(() => cam.destroy(), (err) => {
         assert.equal(err.code, 'ERR_CAMERA_DESTROYED');
@@ -86,7 +87,7 @@ test('CP-8: double destroy() throws ERR_CAMERA_DESTROYED', () => {
 //   -floor(-0.4)=1. With `| 0` it would be (3, 0). Revert -> (3, 0) -> fails.
 // -----------------------------------------------------------------------------
 test('CP-13: apply() floor-snaps uniformly at negative fractional pos', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400);
+    const cam = makeCam(800, 600, 3200, 2400);
     cam.pos[0] = -3.7;
     cam.pos[1] = -0.4;
     // No shake -> offset (0,0); zoom 1 -> the center translate pair cancels, so
@@ -185,7 +186,7 @@ test('CP-3: updateShake(state, NaN) is a no-op; the slot decays after good frame
 });
 
 test('CP-3: cam.update(NaN, ...) leaves pos/target/zoom byte-identical', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     for (let f = 0; f < 20; f++) cam.update(1 / 60, 900 + f, 700); // a real pose
     const px = cam.pos[0], py = cam.pos[1];
     const tx = cam.target[0], ty = cam.target[1];
@@ -207,7 +208,7 @@ test('CP-3: cam.update(NaN, ...) leaves pos/target/zoom byte-identical', () => {
 //   pos stays in the world envelope. Revert the clamp -> divergence -> fails.
 // -----------------------------------------------------------------------------
 test('CP-4: 40 frames of dt=0.5 stay in the world envelope under BoundsType.NONE', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     cam.setBoundsType(3); // BoundsType.NONE -- only the dt clamp bounds this
     for (let f = 0; f < 40; f++) cam.update(0.5, 1240, 900);
     assert.ok(Number.isFinite(cam.pos[0]) && Number.isFinite(cam.pos[1]), 'pos must stay finite');
@@ -223,7 +224,7 @@ test('CP-4: 40 frames of dt=0.5 stay in the world envelope under BoundsType.NONE
 //   here fails (raw TypeError, wrong code, or a mutated pose).
 // -----------------------------------------------------------------------------
 test('CP-12: setMode(99) throws ERR_CAMERA_MODE at the setter', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     assert.throws(() => cam.setMode(99), (e) => e.code === 'ERR_CAMERA_MODE');
     // mode untouched -> a later update still works
     cam.update(1 / 60, 100, 100);
@@ -231,7 +232,7 @@ test('CP-12: setMode(99) throws ERR_CAMERA_MODE at the setter', () => {
 });
 
 test('CP-12: setState({zoom:NaN}) throws ERR_CAMERA_STATE and mutates nothing', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     cam.update(1 / 60, 900, 700);
     const px = cam.pos[0], z = cam.zoom, vw = cam.visibleW;
     assert.throws(() => cam.setState({ zoom: NaN }), (e) => e.code === 'ERR_CAMERA_STATE');
@@ -240,22 +241,31 @@ test('CP-12: setState({zoom:NaN}) throws ERR_CAMERA_STATE and mutates nothing', 
 });
 
 test('CP-12: setState({posX:5}) violates the pairing rule and mutates nothing', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     const px = cam.pos[0], py = cam.pos[1];
     assert.throws(() => cam.setState({ posX: 5 }), (e) => e.code === 'ERR_CAMERA_STATE');
     assert.ok(Object.is(cam.pos[0], px) && Object.is(cam.pos[1], py), 'pos must not change');
 });
 
 test('CP-12: setState({zoom:0}) is a documented clamp to minZoom (0.25)', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     cam.setState({ zoom: 0 });
     assert.equal(cam.zoom, 0.25);
     assert.equal(cam.visibleW, 3200); // 800 / 0.25
 });
 
-test('CP-12: shakePreset(undefined) is a no-op returning this', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
-    assert.equal(cam.shakePreset(undefined), cam);
+// v2.0.0 detach: shakePreset() was DROPPED at the major (removed from the
+// prototype, no throwing tombstone -- absence is the honest signal, D3). The
+// PRO2 no-op-on-unknown-name contract is preserved by the D4 migration idiom:
+// getPreset returns null for an unknown/undefined name, and the guard skips
+// shake -- nothing is activated, exactly as shakePreset(undefined) did.
+test('CP-12 (v2.0.0): shakePreset is gone; the getPreset-guard idiom stays a no-op', () => {
+    const cam = makeCam(800, 600, 3200, 2400, 1);
+    assert.equal(typeof cam.shakePreset, 'undefined', 'shakePreset must be removed, no tombstone');
+    // The migration idiom for an unknown/undefined name: null preset -> no shake.
+    const p = getPreset(undefined);
+    assert.equal(p, null, 'getPreset(undefined) must be null (documented no-op preserved)');
+    if (p) cam.shake(p);
     assert.equal(cam._shake.active, false);
     for (let i = 0; i < cam._shake.slotCount; i++) {
         assert.equal(cam._shake.slots[i].active, false);
@@ -263,7 +273,7 @@ test('CP-12: shakePreset(undefined) is a no-op returning this', () => {
 });
 
 test('CP-12: setZoom(NaN) and zoomAt(NaN,0,1) throw ERR_CAMERA_ZOOM', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     assert.throws(() => cam.setZoom(NaN), (e) => e.code === 'ERR_CAMERA_ZOOM');
     assert.throws(() => cam.zoomAt(NaN, 0, 1), (e) => e.code === 'ERR_CAMERA_ZOOM');
 });
@@ -276,14 +286,14 @@ test('CP-12: setZoom(NaN) and zoomAt(NaN,0,1) throw ERR_CAMERA_ZOOM', () => {
 //   next update() -> the code check here fails.
 // -----------------------------------------------------------------------------
 test('CP-19: setTargetCount(64) on 2 targets throws ERR_CAMERA_TARGETS at the setter', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     cam.trackMultiple([{ x: 0, y: 0 }, { x: 100, y: 100 }]);
     assert.throws(() => cam.setTargetCount(64), (e) => e.code === 'ERR_CAMERA_TARGETS');
     assert.equal(cam._mt.count, 2, 'count must not change');
 });
 
 test('CP-19: trackMultiple(null) and a garbage entry throw ERR_CAMERA_TARGETS', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     assert.throws(() => cam.trackMultiple(null), (e) => e.code === 'ERR_CAMERA_TARGETS');
     assert.throws(() => cam.trackMultiple([{ x: NaN, y: 0 }]), (e) => e.code === 'ERR_CAMERA_TARGETS');
 });
@@ -301,7 +311,7 @@ test('CP-19: trackMultiple(null) and a garbage entry throw ERR_CAMERA_TARGETS', 
 // -----------------------------------------------------------------------------
 test('CP-11: at:0 / at:1 / at:"<" / at:"+=100" / at:undefined duration pins', () => {
     const mk = (at) => {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         const seq = cam.createSequence().moveTo(100, 100, 1000)
             .wait(500, at === undefined ? undefined : { at });
         seq.play();               // build the timeline (at-aware duration)
@@ -317,7 +327,7 @@ test('CP-11: at:0 / at:1 / at:"<" / at:"+=100" / at:undefined duration pins', ()
 });
 
 test('CP-11: shake(name, { at: 0 }) is honored (fires at t=0, not appended)', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     const seq = cam.createSequence()
         .moveTo(500, 500, 1000)
         .shake('impact', { at: 0 });   // 2-arg form: intensity slot carries { at }
@@ -338,7 +348,7 @@ test('CP-11: shake(name, { at: 0 }) is honored (fires at t=0, not appended)', ()
 //   grows the count -> fails.
 // -----------------------------------------------------------------------------
 test('CP-5: stop() releases the ticker -- pumpRaf delta is 0 after stop', async () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     const seq = cam.createSequence().moveTo(400, 300, 1000).zoomTo(1.5, 800);
     cam.playSequence(seq);
     pumpRaf(); pumpRaf();            // advance a few frames while live
@@ -351,13 +361,13 @@ test('CP-5: stop() releases the ticker -- pumpRaf delta is 0 after stop', async 
 });
 
 test('CP-5/F2: a stopped seq does not pin the loop after a later clean seq destroys', async () => {
-    const camA = new CinematicCameraPro(800, 600, 3200, 2400, 2);
+    const camA = makeCam(800, 600, 3200, 2400, 2);
     const seqA = camA.createSequence().moveTo(200, 200, 800);
     camA.playSequence(seqA);
     pumpRaf();
     seqA.stop();                     // pre-fix: stopped-not-destroyed pins the loop
 
-    const camB = new CinematicCameraPro(800, 600, 3200, 2400, 3);
+    const camB = makeCam(800, 600, 3200, 2400, 3);
     const seqB = camB.createSequence().moveTo(300, 300, 800);
     camB.playSequence(seqB);
     pumpRaf();
@@ -379,7 +389,7 @@ test('CP-5/F2: a stopped seq does not pin the loop after a later clean seq destr
 //   stop()/completion clear it.
 // -----------------------------------------------------------------------------
 test('D-d: resume() after stop() is a no-op (does not replay)', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     const seq = cam.createSequence().shake('impact', { at: 0 }).moveTo(400, 400, 600);
     cam.playSequence(seq);
     seq.stop();                       // timeline destroyed
@@ -393,7 +403,7 @@ test('D-d: resume() after stop() is a no-op (does not replay)', () => {
 });
 
 test('D-d/A7: resume() after completion refires no shake and adds 0 RAF requests', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     // shake at t=0 so a zombie replay (auto-seek(0)) would refire it immediately.
     const seq = cam.createSequence({ blendOutTime: 0 })
         .shake('impact', { at: 0 })
@@ -418,7 +428,7 @@ test('D-d/A7: resume() after completion refires no shake and adds 0 RAF requests
 // A7 / D-g -- replay + progress + duration after stop.
 // -----------------------------------------------------------------------------
 test('A7/H-E: play -> stop -> play replays; progress after stop is 0', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     const seq = cam.createSequence().moveTo(300, 300, 500).zoomTo(1.4, 400);
     cam.playSequence(seq);
     pumpRaf();
@@ -432,7 +442,7 @@ test('A7/H-E: play -> stop -> play replays; progress after stop is 0', () => {
 });
 
 test('A7/CP-11: duration after stop falls to the step-sum (1500 for the +=100 build)', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     const seq = cam.createSequence().moveTo(100, 100, 1000).wait(500, { at: '+=100' });
     seq.play();
     assert.equal(seq.duration, 1600, 'live timeline duration is at-aware (1600)');
@@ -446,7 +456,7 @@ test('A7/CP-11: duration after stop falls to the step-sum (1500 for the +=100 bu
 //   duration-0 tracks it crosses.
 // -----------------------------------------------------------------------------
 test('D-g: seek() after stop() rebuilds and fires a crossed 0-duration callback', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    const cam = makeCam(800, 600, 3200, 2400, 1);
     let called = 0;
     const seq = cam.createSequence()
         .moveTo(200, 200, 1000)
@@ -470,7 +480,7 @@ test('D-g: seek() after stop() rebuilds and fires a crossed 0-duration callback'
 // -----------------------------------------------------------------------------
 test('CP-10b/A5: blendOutTime:0 completion == plain follow from the final pose', () => {
     const DT = 1 / 60;
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE);
     const seq = cam.createSequence({ blendOutTime: 0 })
         .moveTo(700, 500, 300)
@@ -483,7 +493,7 @@ test('CP-10b/A5: blendOutTime:0 completion == plain follow from the final pose',
     assert.equal(cam._blendRemain, 0, 'blendOutTime:0 must NOT arm a blend');
 
     // Control matched to the camera's exact pose, then stepped identically.
-    const control = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const control = makeCam(800, 600, 3200, 2400, 9);
     control.setMode(FollowMode.PREDICTIVE);
     control.setState({
         posX: cam.pos[0], posY: cam.pos[1],
@@ -505,7 +515,7 @@ test('CP-10b/A5: blendOutTime:0 completion == plain follow from the final pose',
 
 test('CP-10b/A5: default 0.3 reaches a static target in 18 +/- 1 frames, monotone, bounded step', () => {
     const DT = 1 / 60;
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE); // zero-velocity -> static, deadzone-free target
     const seq = cam.createSequence({ blendOutTime: 0.3 }).moveTo(1500, 1200, 200);
     cam.playSequence(seq);
@@ -539,7 +549,7 @@ test('CP-10b/A5: default 0.3 reaches a static target in 18 +/- 1 frames, monoton
 
 test('CP-10b/A5: stop() (direct seq.stop) never blends', () => {
     const DT = 1 / 60;
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 9);
+    const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE);
     const seq = cam.createSequence({ blendOutTime: 0.3 }).moveTo(1500, 1200, 400);
     cam.playSequence(seq);
@@ -571,7 +581,7 @@ test('A6/H-C: 600-frame no-sequence stream is byte-identical to the 1.2.0 fixtur
     const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
     const FRAMES = 600, FIELDS = 9, DT = 1 / 60;
-    const cam = new CinematicCameraPro(800, 600, 1600, 1200, 1234);
+    const cam = makeCam(800, 600, 1600, 1200, 1234);
     let tx = 0, ty = 0, rot = 0, sx = 0;
     const sink = {
         translate(x, y) { tx = x; ty = y; },

@@ -17,7 +17,7 @@ import {
     CinematicCameraPro,
     createShakeState, addShake, addTraumaSimple, updateShake, computeShake,
 } from '../src/index.js';
-import './helpers.mjs'; // RAF polyfill (playSequence() starts lite-timeline's ticker)
+import { makeCam } from './helpers.mjs'; // RAF polyfill + v2.0.0 attach (playSequence starts lite-timeline's ticker)
 
 // -----------------------------------------------------------------------------
 // CP-14/H-F -- addShake(state, {trauma}, intensity) cross-product.
@@ -174,7 +174,7 @@ test('CP-14/H-F anti-vacuity: the pre-fix `trauma || 0.5` formula disagrees with
 // on its own (no method call reaches nulled state through it).
 // -----------------------------------------------------------------------------
 test('CP-8: sequencePlaying is safe (false, not throw) after destroy()', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400);
+    const cam = makeCam(800, 600, 3200, 2400);
     cam.destroy();
     let threw = false;
     let value;
@@ -184,7 +184,7 @@ test('CP-8: sequencePlaying is safe (false, not throw) after destroy()', () => {
 });
 
 test('CP-8: sequencePlaying is safe after destroy() even mid-sequence', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400);
+    const cam = makeCam(800, 600, 3200, 2400);
     const seq = cam.createSequence().wait(99999);
     cam.playSequence(seq);
     assert.equal(cam.sequencePlaying, true, 'sequence must be reported playing before destroy');
@@ -203,7 +203,7 @@ test('CP-8: sequencePlaying is safe after destroy() even mid-sequence', () => {
 // must leave the camera in the same fully-dead state as an idle destroy().
 // -----------------------------------------------------------------------------
 test('CP-8: destroy() while a sequence is active tears down cleanly', () => {
-    const cam = new CinematicCameraPro(800, 600, 3200, 2400);
+    const cam = makeCam(800, 600, 3200, 2400);
     const seq = cam.createSequence().moveTo(100, 100, 500).wait(200);
     cam.playSequence(seq);
     assert.equal(cam.sequencePlaying, true);

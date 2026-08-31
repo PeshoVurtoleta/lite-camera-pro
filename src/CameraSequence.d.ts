@@ -82,5 +82,14 @@ export declare function timedShake(
     opts?: CameraSequenceOptions,
 ): CameraSequence;
 
+/**
+ * Attach the sequence factory to one camera (v2.0.0 detach). Installs a
+ * per-instance createSequence(options) that calls createCameraSequence(this,
+ * options). Returns the camera for chaining. With no attach, call
+ * createCameraSequence(cam, options) directly.
+ * @throws Error `code = "ERR_ALREADY_ATTACHED"` if sequences are already attached.
+ */
+export declare function withSequences<C>(cam: C): C;
+
 declare const _default: typeof createCameraSequence;
 export default _default;

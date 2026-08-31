@@ -12,13 +12,18 @@
 ### Cinematic Camera System for Canvas2D Games
 
 > Zero-GC. Zero external deps. Framework-agnostic.
-> One import. Every camera feature a 2D game needs.
+> The class you ship, the subsystems you opt into.
 
-**2,916 lines of source · 10 modules · Full TypeScript · 105 unit tests**
+**Full TypeScript -- 298 tests -- v2.0.0 detach: a class-only camera is 15.62 KB gz (was 24.49 KB)**
 
 ```
 npm install @zakkster/lite-camera-pro
 ```
+
+v2.0.0 detach: parallax, timeline sequences and the debug HUD are no longer
+bundled into the class -- opt in per instance with `withParallax` / `withSequences`
+/ `withDebug` from their subpaths. A class-only consumer ships none of them (nor
+`lite-timeline`). See the [migration table](#migration-from-1x-to-200).
 
 Need only screen shake? Import the `./shake` subpath and pull just the engine +
 presets (3.01 KB gz -- esm, unminified, gzip -9):
@@ -147,6 +152,8 @@ All `@zakkster` packages. Zero third-party dependencies in the final bundle.
 
 ```js
 import { CinematicCameraPro, FollowMode } from '@zakkster/lite-camera-pro';
+// v2.0.0: opt into the subsystems you use, from their subpaths.
+import { withDebug } from '@zakkster/lite-camera-pro/debug';
 
 const cam = new CinematicCameraPro(
     canvas.width,   // viewport width
@@ -154,6 +161,7 @@ const cam = new CinematicCameraPro(
     WORLD_W,        // world width
     WORLD_H         // world height
 );
+withDebug(cam);     // installs cam.debug/cam.debugHUD (+ withParallax / withSequences as needed)
 
 // ── Game loop ──
 function update(dt) {
@@ -164,11 +172,15 @@ function render(ctx) {
     ctx.save();
     cam.apply(ctx);       // transforms the canvas
     drawWorld(ctx);
-    cam.debug(ctx);       // world-space overlay
+    cam.debug(ctx);       // world-space overlay (needs withDebug)
     ctx.restore();
-    cam.debugHUD(ctx);    // screen-space HUD
+    cam.debugHUD(ctx);    // screen-space HUD (needs withDebug)
 }
 ```
+
+A camera that only follows and shakes needs no attach at all -- `update`,
+`apply`, `shake`, `setZoom`, `trackMultiple`, bounds and coordinate conversion
+are all on the class.
 
 ---
 
@@ -321,17 +333,23 @@ Multiple shakes run simultaneously and sum together. Each slot has its own traum
 // Backward-compatible simple trauma
 cam.addTrauma(0.5);
 
-// Named presets
-cam.shakePreset('explosion');       // big boom
-cam.shakePreset('earthquake');      // sustained rumble
-cam.shakePreset('recoil');          // directional upward kick
-cam.shakePreset('impact');          // sharp snappy jolt
-cam.shakePreset('landing');         // vertical downward push
-cam.shakePreset('damage');          // quick pulse, no rotation
-cam.shakePreset('rumble');          // continuous low vibration
-cam.shakePreset('heavy_impact');    // maximum everything
+// v2.0.0: named presets moved to the ./shake subpath; cam.shakePreset was
+// dropped. Fetch a preset and fire it -- the guard is MANDATORY (getPreset
+// returns null on an unknown name, and cam.shake(null) throws).
+import { getPreset, registerPreset } from '@zakkster/lite-camera-pro/shake';
 
-// Custom profile
+const preset = (name, i = 1) => { const p = getPreset(name); if (p) cam.shake(p, i); };
+
+preset('explosion');       // big boom
+preset('earthquake');      // sustained rumble
+preset('recoil');          // directional upward kick
+preset('impact');          // sharp snappy jolt
+preset('landing');         // vertical downward push
+preset('damage');          // quick pulse, no rotation
+preset('rumble');          // continuous low vibration
+preset('heavy_impact');    // maximum everything
+
+// Custom profile (cam.shake is on the class -- no attach needed)
 cam.shake({
     trauma:    0.6,
     freq:      18,      // noise frequency (higher = jittery)
@@ -343,20 +361,18 @@ cam.shake({
 });
 
 // Layer multiple shakes for complex events
-cam.shakePreset('explosion');
-cam.shakePreset('recoil', 0.7);  // half intensity
-cam.shakePreset('rumble');
+preset('explosion');
+preset('recoil', 0.7);  // half intensity
+preset('rumble');
 
-// Register custom presets
-import { registerPreset } from '@zakkster/lite-camera-pro';
-
+// Register custom presets (registry lives on ./shake)
 registerPreset('sword_clash', {
     trauma: 0.3, freq: 28, decay: 3.0,
     maxOffset: 8, maxAngle: 0.03,
     dirX: 1, dirY: 0,
 });
 
-cam.shakePreset('sword_clash');
+preset('sword_clash');
 
 // Stop all shakes immediately
 cam.clearShakes();
@@ -389,6 +405,11 @@ sequenceDiagram
 **The killer feature.** Chain camera moves with a fluent API. The sequence takes full control of position and zoom. When it ends, follow mode resumes with a smooth transition.
 
 ```js
+// v2.0.0: attach the sequence factory once (or call createCameraSequence(cam,
+// opts) from ./sequence directly).
+import { withSequences } from '@zakkster/lite-camera-pro/sequence';
+withSequences(cam);
+
 const seq = cam.createSequence({ onComplete: () => showUI() })
     .moveTo(boss.x, boss.y, 1200)                     // pan to boss
     .zoomTo(1.8, 800)                                  // zoom in
@@ -446,6 +467,10 @@ graph LR
 Up to 16 layers. Each scrolls at its own speed relative to the camera.
 
 ```js
+// v2.0.0: attach the parallax subsystem once, from the ./parallax subpath.
+import { withParallax } from '@zakkster/lite-camera-pro/parallax';
+withParallax(cam);
+
 cam.addParallaxLayer('sky',        0.1);   // barely moves
 cam.addParallaxLayer('mountains',  0.3);   // slow
 cam.addParallaxLayer('trees',      0.7);   // medium
@@ -530,6 +555,12 @@ cam.clearBoundsRect();                      // revert to full world
 The Pro debug overlay shows everything at a glance. Each panel is individually toggleable.
 
 ```js
+// v2.0.0: attach the debug subsystem once, from the new ./debug subpath. It
+// builds cam.debugConfig (the constructor no longer does) and installs
+// cam.debug/cam.debugHUD.
+import { withDebug } from '@zakkster/lite-camera-pro/debug';
+withDebug(cam);
+
 // Toggle panels on/off
 cam.debugConfig.show.shake    = false;
 cam.debugConfig.show.parallax = false;
@@ -608,18 +639,17 @@ One call to `update()` handles everything. The camera automatically dispatches t
 
 | Module | Lines | Purpose |
 |:---|---:|:---|
-| `CinematicCameraPro.js` | 894 | Main class. Zoom, modes, multi-target, shake, sequences, parallax, bounds |
-| `CameraSequence.js` | 513 | Fluent timeline builder + sequence presets |
-| `DebugHUD.js` | 290 | Screen-space + world-space debug overlays |
-| `ShakeEngine.js` | 286 | 8-slot noise-based shake pool |
+| `CinematicCameraPro.js` | 1127 | Main class + fail-closed detach stubs. Zoom, modes, multi-target, shake, bounds |
+| `CameraSequence.js` | 638 | Fluent timeline builder + sequence presets + `withSequences` (`./sequence`) |
+| `ShakeEngine.js` | 328 | 8-slot noise-based shake pool |
+| `DebugHUD.js` | 319 | Screen/world debug overlays + `withDebug` (`./debug`) |
+| `ParallaxManager.js` | 240 | 16-layer scroll manager + `withParallax` (`./parallax`) |
 | `BoundsSystem.js` | 220 | Per-edge boundary enforcement |
-| `ParallaxManager.js` | 199 | 16-layer scroll manager |
+| `ShakePresets.js` | 192 | 8 frozen profiles + custom registry (`./shake`) |
 | `FollowMode.js` | 179 | 5 pure follow strategies |
-| `ShakePresets.js` | 177 | 8 frozen profiles + custom registry |
-| `MultiTarget.js` | 125 | Bounding box framing + auto-zoom |
-| `index.d.ts` | 228 | Full TypeScript declarations |
-| `index.js` | 33 | Public exports (tree-shakeable) |
-| **Total** | **3,144** | |
+| `index.d.ts` | 166 | Full TypeScript declarations |
+| `MultiTarget.js` | 133 | Bounding box framing + auto-zoom |
+| `index.js` | 32 | Public exports -- the 20-name root surface (D5) |
 
 ---
 
@@ -644,19 +674,15 @@ The only allocations happen during **setup** (constructor, `createSequence()`, `
 Full declarations ship in `src/index.d.ts`:
 
 ```ts
-import {
-    CinematicCameraPro,
-    FollowMode,
-    BoundsType,
-    WrapMode,
-    createCameraSequence,
-    EXPLOSION,
-    registerPreset,
-} from '@zakkster/lite-camera-pro';
+// v2.0.0: the class + core enums come from "."; sequences/presets from subpaths.
+import { CinematicCameraPro, FollowMode, BoundsType } from '@zakkster/lite-camera-pro';
+import { withSequences, type CameraSequence } from '@zakkster/lite-camera-pro/sequence';
+import { getPreset } from '@zakkster/lite-camera-pro/shake';
 
 const cam = new CinematicCameraPro(800, 600, 3200, 2400);
 cam.setMode(FollowMode.PREDICTIVE);
 cam.setBoundsType(BoundsType.ELASTIC);
+withSequences(cam);
 
 const seq: CameraSequence = cam.createSequence()
     .moveTo(400, 300, 1200)
@@ -669,11 +695,19 @@ const seq: CameraSequence = cam.createSequence()
 ## Testing
 
 ```bash
-npm test          # vitest run — 105 tests across 2 files
-npm run test:watch  # vitest watch mode
+npm test          # node:test -- 298 tests
+npm run test:gc   # same, under --expose-gc
+npm run torture   # node --expose-gc test/torture.mjs -- prints "ok"
 ```
 
-`CinematicCameraPro.test.js` covers the facade: initialization, coordinate conversion, all 5 follow modes, multi-target framing (including overlapping-target edge cases), zoom animation, shake engine (slot stealing, directional normalization, decay), bounds enforcement, parallax management, sequences, save/load, and destruction. `subsystems.test.js` covers the directly-exported API: the DebugHUD draws (mock-context smoke tests), the functional shake / parallax / bounds helpers, the multi-target updater, the shake-preset registry, and the sequence preset helpers (panTo, dramaticZoom, bossReveal, timedShake).
+The suite covers the class facade (initialization, coordinate conversion, all 5
+follow modes, multi-target framing, zoom animation, the shake engine, bounds,
+save/load, destruction), the attached subsystems (parallax, sequences, debug),
+the directly-exported functional API, and the v2.0.0 detach gates: a static
+import-graph walk (`test/import-graph.test.js`), literal bundle probes
+(`test/bundle-literals.test.js`), the class-only 3PPLE replay
+(`test/consumer-tripple.test.js`), and the `.`/subpath size ceilings
+(`test/size.mjs`).
 
 ---
 
@@ -686,11 +720,33 @@ lite-camera-pro extends `CinematicCamera`. Drop-in replacement:
 + import { CinematicCameraPro as CinematicCamera } from '@zakkster/lite-camera-pro';
 
   const cam = new CinematicCamera(800, 600, 3200, 2400);
-  // Everything from lite-camera still works.
-  // addTrauma(), update(), apply(), debug() — all backward-compatible.
+  // Everything from lite-camera still works: addTrauma(), update(), apply().
+  // (v2.0.0: debug() now needs withDebug(cam) -- see the 1.x -> 2.0.0 table below.)
 ```
 
 Then add Pro features incrementally. Nothing breaks.
+
+---
+
+## Migration from 1.x to 2.0.0
+
+v2.0.0 detached four subsystems from the class so a class-only consumer stops
+bundling them (and `lite-timeline`). The core -- follow, zoom, shake, multi-target,
+bounds, coordinate conversion, save/load -- is unchanged. Add the opt-ins you use:
+
+| 1.x | 2.0.0 |
+| --- | --- |
+| `cam.shakePreset(name, i)` | `import { getPreset } from '@zakkster/lite-camera-pro/shake';`<br>`const p = getPreset(name); if (p) cam.shake(p, i);` |
+| `cam.createSequence(opts)` | `import { withSequences } from '@zakkster/lite-camera-pro/sequence';`<br>`withSequences(cam); cam.createSequence(opts);` |
+| `cam.addParallaxLayer(...)` / `applyParallax` | `import { withParallax } from '@zakkster/lite-camera-pro/parallax';`<br>`withParallax(cam);` then call sites unchanged |
+| `cam.debug(ctx)` / `cam.debugHUD(ctx)` | `import { withDebug } from '@zakkster/lite-camera-pro/debug';`<br>`withDebug(cam);` then call sites unchanged |
+| `import { getPreset, createCameraSequence, createParallaxState, drawDebugHUD } from '@zakkster/lite-camera-pro';` | import those names from `./shake`, `./sequence`, `./parallax`, `./debug` |
+
+The `getPreset` guard is MANDATORY: an unknown name returns `null` and
+`cam.shake(null)` throws, so `if (p)` preserves the old no-op-on-unknown-name.
+An unattached subsystem method throws a named error (`ERR_PARALLAX_NOT_ATTACHED`,
+`ERR_SEQUENCE_NOT_ATTACHED`, `ERR_DEBUG_NOT_ATTACHED`) whose message names the
+exact import + call to fix it; a second `withX` throws `ERR_ALREADY_ATTACHED`.
 
 ---
 

@@ -13,22 +13,15 @@ import { check } from './harness.mjs';
 import * as mainEntry from '../../src/index.js';
 import { CinematicCameraPro, createShakeState } from '../../src/index.js';
 
-// Frozen 1.0.1 main-entry export-name surface. Captured (VERSION still 1.0.1)
-// with:
-//   node -e "import('./src/index.js').then(m => \
-//     console.log(JSON.stringify(Object.keys(m).sort())))"
-const FROZEN_1_0_1 = [
-    'BoundsType', 'CinematicCameraPro', 'DAMAGE', 'EARTHQUAKE', 'EXPLOSION',
-    'FOLLOW_STRATEGIES', 'FollowMode', 'HEAVY_IMPACT', 'IMPACT', 'LANDING',
-    'RECOIL', 'RUMBLE', 'VERSION', 'WrapMode', 'addParallaxLayer', 'addShake',
-    'addTraumaSimple', 'applyBounds', 'applyParallaxLayer', 'bossReveal',
-    'clearBoundsRect', 'clearShakes', 'computeShake', 'createBoundsState',
-    'createCameraSequence', 'createDebugHUDConfig', 'createMultiTargetState',
-    'createParallaxState', 'createShakeState', 'default', 'dramaticZoom',
-    'drawDebugHUD', 'drawDebugWorld', 'getLayerScroll', 'getPreset',
-    'listPresets', 'panTo', 'registerPreset', 'removeParallaxLayer',
-    'setBoundsAll', 'setBoundsEdges', 'setBoundsRect', 'timedShake',
-    'updateMultiTarget', 'updateParallax', 'updateShake',
+// v2.0.0 detach (D5): the "." export-name surface is exactly the 20 names the
+// class reaches. Kept in sync with subpaths.test.js's ROOT_2_0_0 snapshot; if one
+// drifts without the other, this tier or that test catches it.
+const ROOT_2_0_0 = [
+    'BoundsType', 'CinematicCameraPro', 'FOLLOW_STRATEGIES', 'FollowMode',
+    'VERSION', 'addShake', 'addTraumaSimple', 'applyBounds', 'clearBoundsRect',
+    'clearShakes', 'computeShake', 'createBoundsState', 'createMultiTargetState',
+    'createShakeState', 'default', 'setBoundsAll', 'setBoundsEdges',
+    'setBoundsRect', 'updateMultiTarget', 'updateShake',
 ];
 
 function sameSet(a, b) {
@@ -36,10 +29,10 @@ function sameSet(a, b) {
 }
 
 export async function run() {
-    // 1) Main-entry export-name set is identical to 1.0.1 (VERSION value aside).
+    // 1) Main-entry export-name set is exactly D5's 20-name detach surface.
     const now = Object.keys(mainEntry).sort();
-    check(sameSet(now, FROZEN_1_0_1),
-        () => 'T8: main-entry export set drifted from 1.0.1 -> ' + JSON.stringify(now));
+    check(now.length === 20 && sameSet(now, [...ROOT_2_0_0].sort()),
+        () => 'T8: main-entry export set drifted from the 2.0.0 D5 surface -> ' + JSON.stringify(now));
 
     // 2) Runtime no-fork: the ./shake subpath (self-reference) and the main
     //    entry expose the SAME createShakeState identity. Shake.js re-exports the
@@ -47,8 +40,10 @@ export async function run() {
     const shakeSubpath = await import('@zakkster/lite-camera-pro/shake');
     check(Object.is(mainEntry.createShakeState, shakeSubpath.createShakeState),
         () => 'T8: main-entry and ./shake createShakeState are not the same function');
-    check(Object.is(mainEntry.getPreset, shakeSubpath.getPreset),
-        () => 'T8: main-entry and ./shake getPreset are not the same function');
+    // v2.0.0: getPreset left "." for ./shake -- the no-fork property now lives on
+    // the subpath alone (getPreset is one module, one identity, no root copy).
+    check(!('getPreset' in mainEntry) && typeof shakeSubpath.getPreset === 'function',
+        () => 'T8: getPreset must leave "." and resolve on ./shake');
 
     // 3) cam._shake is produced by the exported createShakeState: structurally
     //    identical to a fresh state (same top-level keys, same slot pool size,

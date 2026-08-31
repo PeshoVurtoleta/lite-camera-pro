@@ -9,9 +9,9 @@
  */
 
 import { CinematicCameraPro } from '../../src/index.js';
-import { registerPreset, getPreset } from '../../src/index.js';
+import { registerPreset, getPreset } from '../../src/ShakePresets.js'; // v2.0.0: presets on ./shake
 import { PUBLIC_METHODS, callByName } from './public-surface.mjs';
-import { check, noopSink, rafCount, pumpRaf } from './harness.mjs';
+import { check, noopSink, rafCount, pumpRaf, makeCam } from './harness.mjs';
 
 function expectDeadCode(fn, label) {
     let code;
@@ -40,7 +40,7 @@ function samePose(a, b, label) {
 export async function run() {
     // --- CP-8: post-destroy calls fail closed on the ENTIRE public surface --
     {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         cam.addTrauma(0.5);
         cam.update(1 / 60, 100, 100);
         cam.apply(noopSink);
@@ -54,14 +54,14 @@ export async function run() {
 
     // --- CP-8: double destroy() throws the same named error ----------------
     {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         cam.destroy();
         expectDeadCode(() => cam.destroy(), 'double destroy()');
     }
 
     // --- setState save-file abuse: garbage snapshot -> ERR_CAMERA_STATE, no-op
     {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         cam.update(1 / 60, 900, 700); // a real pose to protect
         const BAD_SNAPSHOTS = [
             null, undefined, 42, 'save',
@@ -93,7 +93,7 @@ export async function run() {
 
     // --- setTargetCount abuse on a 2-target camera -> ERR_CAMERA_TARGETS ----
     {
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+        const cam = makeCam(800, 600, 3200, 2400, 1);
         cam.trackMultiple([{ x: 0, y: 0 }, { x: 100, y: 100 }]);
         for (const bad of [-1, 2.5, NaN, 64, Infinity, undefined]) {
             const countBefore = cam._mt.count;
@@ -127,7 +127,7 @@ export async function run() {
         // Replacing an attached sequence destroys the old one (its timeline
         // releases the shared ticker). Re-playing the REPLACED (destroyed)
         // sequence is inert -- play() short-circuits on isDestroyed.
-        const cam = new CinematicCameraPro(800, 600, 3200, 2400, 5);
+        const cam = makeCam(800, 600, 3200, 2400, 5);
         const seqA = cam.createSequence().moveTo(200, 200, 800);
         const seqB = cam.createSequence().moveTo(300, 300, 800);
         cam.playSequence(seqA);

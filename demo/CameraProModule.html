@@ -1204,7 +1204,16 @@
 
 <!-- 2. Main Module Script -->
 <script type="module">
-    import { CinematicCameraPro, FollowMode, BoundsType, drawDebugHUD, drawDebugWorld, listPresets, VERSION } from '../src/index.js';
+    // v2.0.0 detach: the four subsystems left the "." barrel. The class comes
+    // from '../src/index.js'; parallax/sequence attach + the debug draws + the
+    // preset registry come from their own module files (the ./parallax,
+    // ./sequence, ./debug, ./shake subpaths). No importmap entry is needed --
+    // these are relative source imports, same package, same files.
+    import { CinematicCameraPro, FollowMode, BoundsType, VERSION } from '../src/index.js';
+    import { withParallax } from '../src/ParallaxManager.js';
+    import { withSequences } from '../src/CameraSequence.js';
+    import { drawDebugHUD, drawDebugWorld } from '../src/DebugHUD.js';
+    import { getPreset, listPresets } from '../src/ShakePresets.js';
     import { clamp } from '@zakkster/lite-lerp';
     import { easeOutExpo, easeInOutCubic } from '@zakkster/lite-ease';
 
@@ -1228,6 +1237,12 @@
     const ctx = canvas.getContext('2d');
 
     const camera = new CinematicCameraPro(VIEW_W, VIEW_H, WORLD_W, WORLD_H, 7);
+    // v2.0.0 detach: opt in to parallax + sequences once, after construction.
+    withParallax(camera);
+    withSequences(camera);
+    // shakePreset() was dropped at 2.0.0 -- replay via the migration idiom:
+    // getPreset from ./shake, guarded (null on unknown name), then shake().
+    const shakePreset = (name, i) => { const p = getPreset(name); if (p) camera.shake(p, i); };
     camera.lerpSpeed = 5.0;
 
     // Initial parallax layers
@@ -2053,15 +2068,15 @@
             syncControls();
         });
         t += 1400;
-        schedule(t, () => camera.shakePreset('rumble'));
+        schedule(t, () => shakePreset('rumble'));
         t += 800;
         schedule(t, () => {
-            camera.shakePreset('explosion');
+            shakePreset('explosion');
             spawnParticles(player.x, player.y, 30, ['#ef4444', '#fbbf24']);
         });
         t += 1200;
         schedule(t, () => {
-            camera.shakePreset('recoil');
+            shakePreset('recoil');
             spawnParticles(player.x, player.y - 20, 16, ['#22d3ee', '#fff']);
         });
         t += 800;
@@ -2103,7 +2118,7 @@
         // 10. Finale
         schedule(t, () => {
             showTitle('LITE-CAMERA\u00B7PRO', 'Production Ready', 'zero-GC \u00B7 high performance', 3500);
-            camera.shakePreset('heavy_impact', 0.6);
+            shakePreset('heavy_impact', 0.6);
             spawnParticles(player.x, player.y, 60, ['#fbbf24', '#22d3ee', '#a78bfa', '#ef4444']);
         });
         t += 3500;
@@ -2166,7 +2181,7 @@
     // Shake presets
     document.querySelectorAll('[data-preset]').forEach(b => {
         b.addEventListener('click', () => {
-            camera.shakePreset(b.dataset.preset);
+            shakePreset(b.dataset.preset);
             spawnParticles(player.x, player.y - 16, 20, ['#ef4444', '#fbbf24', '#fff']);
         });
     });

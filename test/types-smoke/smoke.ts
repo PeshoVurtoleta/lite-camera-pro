@@ -76,21 +76,32 @@ mt.targets = points;
 const mtCount: number = mt.count;
 void mtCount;
 
-// -- main entry: class + VERSION + functional layer --------------------------
+// -- main entry: class + VERSION + the 20-name functional layer (D5) ---------
+// v2.0.0 detach: createCameraSequence is NO LONGER at "." -- it comes from the
+// ./sequence subpath; presets come from ./shake; withX from the subpaths.
 import CinematicCameraPro, {
     VERSION,
     FollowMode,
-    createCameraSequence,
-    type CameraSequence,
+    type CameraAttachErrorCode,
 } from '@zakkster/lite-camera-pro';
+import { withSequences, type CameraSequence } from '@zakkster/lite-camera-pro/sequence';
+import { withParallax } from '@zakkster/lite-camera-pro/parallax';
+import { withDebug, createDebugHUDConfig, type DebugHUDConfig } from '@zakkster/lite-camera-pro/debug';
 
 const version: string = VERSION;
 const cam = new CinematicCameraPro(800, 600, 3200, 2400, 42);
 cam.setMode(FollowMode.HYBRID);
-cam.shakePreset('impact', 0.8);
+// Preset migration idiom (D4): getPreset from ./shake, guarded, then shake().
+const p = getPreset('impact');
+if (p) cam.shake(p, 0.8);
 cam.update(1 / 60, 400, 300);
-const seq: CameraSequence = createCameraSequence(cam);
+
+// Attach idioms return the camera for chaining; each is single-shot.
+withDebug(withSequences(withParallax(cam)));
+const seq: CameraSequence = cam.createSequence();
 seq.moveTo(100, 100, 500).play();
+const cfg: DebugHUDConfig = createDebugHUDConfig();
+const errCode: CameraAttachErrorCode = 'ERR_ALREADY_ATTACHED';
 const dur: number = seq.duration;
 const zoom: number = cam.zoom;
-void version; void dur; void zoom;
+void version; void dur; void zoom; void cfg; void errCode;
