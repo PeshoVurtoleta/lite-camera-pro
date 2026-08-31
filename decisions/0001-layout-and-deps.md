@@ -64,11 +64,14 @@ against exactly these.
 
 | dependency         | tested-against | declared floor |
 |--------------------|----------------|----------------|
-| @zakkster/lite-camera   | 1.2.1     | ^1.0.0 |
+| @zakkster/lite-camera   | 1.2.2     | ^1.2.2 |
 | @zakkster/lite-ease     | 1.1.0     | ^1.0.0 |
 | @zakkster/lite-lerp     | 1.3.0     | ^1.0.0 |
 | @zakkster/lite-noise    | 1.6.0     | ^1.0.0 |
 | @zakkster/lite-timeline | 1.0.1     | ^1.0.0 |
+
+The lite-camera row is refreshed for v2.1.0 (PRO4): tested-against 1.2.2, floor
+raised to `^1.2.2` (see the floor-bump note below).
 
 ## Floor policy
 
@@ -95,6 +98,20 @@ consumed members: `_halfW` at CinematicCamera.js:30, `destroy()` at :105. Floor
 
 Forward note (PRO4): when the resize override lands, the camera floor rises to
 `^1.2.1`. Do NOT raise it now -- 1.1.0 consumes nothing past 1.0.0.
+
+### lite-camera floor bump to ^1.2.2 (v2.1.0, PRO4)
+
+The CP-7 resize override (`resize(viewW, viewH, worldW, worldH)`, D6/0008) now
+calls `super.resize(...)` and depends on the base's own resize contract:
+validate-before-mutate on the four dims (base throws `ERR_CAMERA_DIMS` with
+nothing mutated), the shared `_recompute()` cold path, and the base's pose
+re-clamp. That resize() method plus the dims-are-readonly d.ts hardening are
+1.2.x work, so the floor rises from `^1.0.0` to `^1.2.2` -- the tested-against
+version. This is a genuine consumed-feature bump (the override cannot exist
+against a base without resize()), not a precautionary one. Refreshed
+tested-against for v2.1.0: lite-camera 1.2.2, lite-ease 1.1.0, lite-lerp 1.3.0,
+lite-noise 1.6.0, lite-timeline 1.0.1 -- installed == tested-against, and the
+torture gate, the size gate, and the tsc smoke all ran against exactly these.
 
 ### lite-lerp -- floor ^1.0.0
 

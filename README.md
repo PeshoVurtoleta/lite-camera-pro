@@ -14,7 +14,7 @@
 > Zero-GC. Zero external deps. Framework-agnostic.
 > The class you ship, the subsystems you opt into.
 
-**Full TypeScript -- 298 tests -- v2.0.0 detach: a class-only camera is 15.62 KB gz (was 24.49 KB)**
+**Full TypeScript -- 348 tests -- detached by design: a class-only camera is 17.68 KB gz (was 24.49 KB before 2.0.0)**
 
 ```
 npm install @zakkster/lite-camera-pro
@@ -26,7 +26,7 @@ bundled into the class -- opt in per instance with `withParallax` / `withSequenc
 `lite-timeline`). See the [migration table](#migration-from-1x-to-200).
 
 Need only screen shake? Import the `./shake` subpath and pull just the engine +
-presets (3.01 KB gz -- esm, unminified, gzip -9):
+presets (3.09 KB gz -- esm, unminified, gzip -9):
 
 ```js
 import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
@@ -245,6 +245,13 @@ cam.maxZoom = 4.0;
 // Read visible area (cached, zero-alloc — use for frustum culling)
 const w = cam.visibleW;  // viewW / zoom
 const h = cam.visibleH;  // viewH / zoom
+
+// Zoom-aware resize (v2.1.0). The four dims are readonly; resize() is the one
+// write path. visibleW/_maxX are correct on return (no stale frame) and the pose
+// is re-clamped into the zoom-aware box -- no yank. At zoom 2, a camera settled
+// at pos 2560 in a 3200x2400 world resized to view 1600x1200 lands pos 2400,
+// visibleW 800 (the inherited base resize alone yanks it to 1600 with a stale 400).
+cam.resize(1600, 1200, 3200, 2400);
 ```
 
 **Coordinate conversion** (zero-alloc, caller-owned `out` pattern):
@@ -334,8 +341,9 @@ Multiple shakes run simultaneously and sum together. Each slot has its own traum
 cam.addTrauma(0.5);
 
 // v2.0.0: named presets moved to the ./shake subpath; cam.shakePreset was
-// dropped. Fetch a preset and fire it -- the guard is MANDATORY (getPreset
-// returns null on an unknown name, and cam.shake(null) throws).
+// dropped. Fetch a preset and fire it -- the guard is now OPTIONAL (getPreset
+// returns null on an unknown name, and v2.1.0 makes cam.shake(null) a documented
+// no-op; a non-object profile throws ERR_SHAKE_PROFILE).
 import { getPreset, registerPreset } from '@zakkster/lite-camera-pro/shake';
 
 const preset = (name, i = 1) => { const p = getPreset(name); if (p) cam.shake(p, i); };
@@ -376,6 +384,13 @@ preset('sword_clash');
 
 // Stop all shakes immediately
 cam.clearShakes();
+
+// Base-shake bridge (v2.1.0): the inherited lite-camera fields are live
+// accessors onto the default omni slot, so a base-style caller's shake works.
+cam.shakeMaxOffset = 20;   // px at full trauma (default 15)
+cam.shakeMaxAngle  = 0.04; // rad at full trauma (default 0.05)
+cam.shakeTrauma    = 1;    // ASSIGNS min(1, v) (addTrauma accumulates); <= 0 stops it
+// A non-finite write throws ERR_CAMERA_SHAKE; writing a max field alone fires nothing.
 ```
 
 ---
@@ -501,6 +516,14 @@ ctx.restore();
 // Update or remove layers
 cam.addParallaxLayer('sky', 0.15);   // update speed by re-adding same id
 cam.removeParallaxLayer('foreground');
+
+// Tiling: WrapMode wraps a layer's scroll into tile space (negative-safe
+// Euclidean modulo). A REPEAT mode requires the tile size for its axis, or
+// addParallaxLayer throws ERR_PARALLAX_TILE (fail closed on both add paths).
+import { WrapMode } from '@zakkster/lite-camera-pro/parallax';
+cam.addParallaxLayer('clouds', 0.2, 0.2, { wrap: WrapMode.REPEAT_X, tileW: 256 });
+// scroll of 3*256 + 7 reads 7; a scroll of -9 reads 247. NONE layers are
+// byte-identical to a non-wrapping build (one `wrap !== 0` compare, ~1.72 ns/layer).
 ```
 
 ---
@@ -511,7 +534,7 @@ cam.removeParallaxLayer('foreground');
 graph LR
     subgraph "Boundary Behavior"
         H["HARD<br/><i>stops at edge</i>"]
-        S["SOFT<br/><i>decelerates smoothly</i>"]
+        S["SOFT<br/><i>holds a half-zone back</i>"]
         E["ELASTIC<br/><i>overshoot + spring back</i>"]
         N["NONE<br/><i>no enforcement</i>"]
     end
@@ -523,6 +546,12 @@ graph LR
 ```
 
 Configure boundary behavior per-edge. Mix and match.
+
+`SOFT` decelerates as the camera nears the edge and holds a half-zone back: the
+granted position is monotone, fixed at the zone entry, and never nearer the edge
+than requested (a quadratic hold-out `g = edge + s*sz*0.5*(1 + u*u)`). Only `HARD`
+reaches the edge itself. With `softZone` 80 at edge 0, a requested 40 is granted
+50, 20 -> 42.5, 79 -> 79.01.
 
 ```js
 import { BoundsType } from '@zakkster/lite-camera-pro';
@@ -538,7 +567,9 @@ cam.setBoundsEdges({
     bottom: BoundsType.HARD,
 });
 
-// Tuning
+// Tuning (guarded setter: softZone >= 0, all finite, else ERR_CAMERA_BOUNDS)
+cam.setSoftZone(80, 30, 8.0);      // softZone, elasticMax, elasticStrength
+// or the raw fields:
 cam._bounds.softZone = 80;         // deceleration zone width (pixels)
 cam._bounds.elasticMax = 30;       // max overshoot (pixels)
 cam._bounds.elasticStrength = 8.0; // spring-back speed
@@ -547,6 +578,9 @@ cam._bounds.elasticStrength = 8.0; // spring-back speed
 cam.setBoundsRect(200, 200, 1200, 800);   // constrain to rectangle
 cam.clearBoundsRect();                      // revert to full world
 ```
+
+Bounds edge types fail closed: a garbage type (`setBoundsType(999)`) or a
+non-finite rect throws `ERR_CAMERA_BOUNDS` with nothing mutated.
 
 ---
 
@@ -695,7 +729,7 @@ const seq: CameraSequence = cam.createSequence()
 ## Testing
 
 ```bash
-npm test          # node:test -- 298 tests
+npm test          # node:test -- 348 tests
 npm run test:gc   # same, under --expose-gc
 npm run torture   # node --expose-gc test/torture.mjs -- prints "ok"
 ```

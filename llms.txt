@@ -6,7 +6,7 @@
 > engine at the core "." entry; parallax, timeline sequences and a debug HUD are
 > per-instance opt-ins on their own subpaths (v2.0.0 detach).
 
-Version: 2.0.0
+Version: 2.1.0
 
 ESM only. `import` from `@zakkster/lite-camera-pro`. Default export is the
 CinematicCameraPro class. All hot-path APIs avoid allocation; setup-time calls
@@ -16,7 +16,8 @@ v2.0.0 detach (CP-21/CP-22/CP-23): a bundler cannot drop a reachable class
 method, so a class-only consumer used to ship four subsystems it never called
 (DebugHUD, CameraSequence, ParallaxManager, ShakePresets) plus all of
 @zakkster/lite-timeline. Those four are now SEVERED from the class and the root
-barrel; the "." bundle dropped 24.49 KB -> 15.62 KB gz (~36%). Parallax,
+barrel; the "." bundle dropped 24.49 KB -> 15.62 KB gz (~36%) at 2.0.0
+(17.68 KB at 2.1.0 after the subsystem-truth features). Parallax,
 sequences and debug come back per instance via withParallax / withSequences /
 withDebug on their subpaths; presets moved to ./shake; shakePreset() was dropped.
 
@@ -68,6 +69,19 @@ cam.zoomAt(targetObj, level, duration = 0, ease = null)   // zoom toward a movin
 cam.minZoom, cam.maxZoom                                  // clamp limits
 cam.visibleW, cam.visibleH                                // cached visible area (viewW/zoom, viewH/zoom); use for culling
 
+## Resize (zoom-aware, CP-7)
+cam.resize(viewW, viewH, worldW, worldH)                  // returns this
+The four dims (viewW/viewH/worldW/worldH) are READONLY from outside -- resize()
+is the one blessed write path (the d.ts declares them readonly, matching the
+base). Unlike the inherited base resize (which clamps the pose to a zoom-UNAWARE
+max and leaves visibleW stale a frame), the Pro override lands it in one call:
+visibleW/_maxX are correct ON RETURN (no stale frame), and target AND pos are
+HARD re-clamped into the zoom-aware box (custom rect honored). Example: zoom 2,
+world 3200x2400, pos settled 2560, resize(1600, 1200, 3200, 2400) -> visibleW
+800, _maxX 2400, pos 2400 (base alone: 1600 and a stale 400). A non-finite or
+<= 0 dim is rejected by the base dims door (code from lite-camera) with nothing
+mutated on either side; Pro adds no second door.
+
 ## Coordinate conversion (zero-alloc, caller-owned out)
 const pt = { x: 0, y: 0 };          // allocate once
 cam.screenToWorld(sx, sy, pt);      // mutates pt, returns pt
@@ -83,9 +97,15 @@ targets: array of objects with numeric x, y.
 cam.addTrauma(amount)                       // simple omnidirectional trauma (backward compatible)
 cam.shake(profile, intensity = 1)           // custom: { trauma, freq, decay, maxOffset, maxAngle, dirX, dirY }
 cam.clearShakes()
+Base-shake bridge (CP-9): cam.shakeTrauma / cam.shakeMaxOffset (default 15 px) /
+cam.shakeMaxAngle (default 0.05 rad) are live accessors onto the default omni
+slot -- a base-style caller's shake works on Pro. shakeTrauma reads the slot
+trauma (else 0); setting <= 0 deactivates it, > 0 assigns min(1, v) (ASSIGNS, not
+accumulates like addTrauma). Writing a max field alone fires no shake. A
+non-finite write throws ERR_CAMERA_SHAKE.
 Named presets moved to the ./shake subpath at v2.0.0 (cam.shakePreset was dropped):
   import { getPreset } from '@zakkster/lite-camera-pro/shake';
-  const p = getPreset(name); if (p) cam.shake(p, intensity);   // guard is MANDATORY (getPreset returns null on an unknown name; cam.shake(null) throws)
+  const p = getPreset(name); if (p) cam.shake(p, intensity);   // guard now OPTIONAL: getPreset returns null on an unknown name, and cam.shake(null) is a documented no-op (a non-object profile throws ERR_SHAKE_PROFILE)
 Preset names: 'explosion','earthquake','recoil','impact','landing','damage','rumble','heavy_impact'.
 Registry (./shake exports): registerPreset(name, profile), listPresets(), getPreset(name).
 Preset constants (./shake): EXPLOSION, EARTHQUAKE, RECOIL, IMPACT, LANDING, DAMAGE, RUMBLE, HEAVY_IMPACT.
@@ -132,7 +152,15 @@ withParallax(cam);   // once, then:
 cam.addParallaxLayer(id, speedX, speedY = speedX, opts)   // re-adding same id updates it
 cam.removeParallaxLayer(id)
 cam.applyParallax(id, ctx)                                 // per-layer transform; wrap in ctx.save()/restore()
-WrapMode (./parallax export) for layer wrapping behavior.
+opts: { offsetX, offsetY, wrap, tileW, tileH }. WrapMode (./parallax export):
+NONE(0) | REPEAT_X(1) | REPEAT_Y(2) | REPEAT_BOTH(3). A REPEAT mode WRAPS the
+layer scroll into tile space -- updateParallax writes the wrapped value back into
+scrollX/scrollY, so getLayerScroll/applyParallax emit wrapped values (one source
+of truth). The wrap is a negative-safe Euclidean modulo s - floor(s/tile)*tile,
+result in [0, tile): a REPEAT_X layer, tileW 256, at scroll 3*256+7 reads 7; at
+-9 reads 247. Fail closed: a REPEAT_X/BOTH wrap requires a finite tileW > 0 and
+REPEAT_Y/BOTH a finite tileH > 0, else ERR_PARALLAX_TILE (both add paths, nothing
+mutated). NONE layers are byte-identical to a non-wrapping build.
 
 ## Bounds (per-edge: HARD | SOFT | ELASTIC | NONE)
 import { BoundsType } from '@zakkster/lite-camera-pro';
@@ -140,7 +168,15 @@ cam.setBoundsType(BoundsType.SOFT)                          // returns this
 cam.setBoundsEdges({ left, right, top, bottom })            // each a BoundsType
 cam.setBoundsRect(x, y, w, h)                               // constrain to a rectangle (rooms/arenas)
 cam.clearBoundsRect()                                       // revert to full world
-Tuning: cam._bounds.softZone, cam._bounds.elasticMax, cam._bounds.elasticStrength.
+cam.setSoftZone(softZone, elasticMax?, elasticStrength?)    // finiteness door (softZone >= 0)
+SOFT decelerates as it nears the edge and HOLDS A HALF-ZONE back: the granted
+position is monotone, fixed at the zone entry, and NEVER nearer the edge than
+requested (a quadratic hold-out, g = edge + s*sz*0.5*(1 + u*u), u = clamp(dist/sz,
+0, 1)). Only HARD reaches the edge itself; SOFT asymptotically refuses the last
+sz/2. Example (sz 80, edge 0): requested 40 -> granted 50; 20 -> 42.5; 79 ->
+79.01. Tuning still works as raw fields (cam._bounds.softZone/elasticMax/
+elasticStrength); setSoftZone is the guarded setter (non-finite or softZone < 0
+-> ERR_CAMERA_BOUNDS).
 
 ## Save / load
 const snap = cam.getState();   // { posX, posY, targetX, targetY, zoom, mode }
@@ -155,18 +191,20 @@ cam.debugConfig.show.shake | parallax | bounds | ... = true|false   // toggle pa
 Standalone (no attach) from ./debug: createDebugHUDConfig() builds a config;
 drawDebugWorld(cam, ctx, config) and drawDebugHUD(cam, ctx, config) are the underlying draws.
 
-## Root "." surface (exactly 20 names, v2.0.0 -- D5)
+## Root "." surface (exactly 22 names, v2.1.0 -- D5)
 VERSION, CinematicCameraPro, default, FollowMode, FOLLOW_STRATEGIES,
 createMultiTargetState, updateMultiTarget, createShakeState, addShake,
 addTraumaSimple, updateShake, computeShake, clearShakes, BoundsType,
-createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect,
-applyBounds. Nothing else -- this is precisely what the class itself reaches.
+createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, setSoftZone,
+clearBoundsRect, applyBounds, clampToBounds. Nothing else -- this is precisely
+what the class itself reaches (PRO4 added setSoftZone + clampToBounds, both
+reached by the class: the CP-26 soft-zone door and the CP-7 resize re-clamp).
 
 ## Standalone functional API (tree-shakeable; the class composes these)
 Shake (root + ./shake):    createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes
 Presets (./shake):         getPreset, registerPreset, listPresets + EXPLOSION/EARTHQUAKE/RECOIL/IMPACT/LANDING/DAMAGE/RUMBLE/HEAVY_IMPACT
 Parallax (./parallax):     createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode, withParallax
-Bounds (root + ./bounds):  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, BoundsType
+Bounds (root + ./bounds):  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, setSoftZone, clearBoundsRect, applyBounds, clampToBounds, BoundsType
 Multi (root + ./multi):    createMultiTargetState, updateMultiTarget
 Follow (root + ./follow):  FollowMode, FOLLOW_STRATEGIES
 Sequence (./sequence):     createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake, withSequences
@@ -175,14 +213,14 @@ Debug (./debug):           createDebugHUDConfig, drawDebugHUD, drawDebugWorld, w
 ## Subpath exports (import only what you use; gz, esm, unminified, gzip -9)
 Beside the "." main entry, seven subsystem subpaths + "./package.json". Same runtime
 identities as their source modules (one engine, no fork). Per-subpath gz weight:
-  ./shake     3.01 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
-  ./parallax  1.10 KB  createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode, withParallax
-  ./bounds    1.13 KB  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, BoundsType
+  ./shake     3.09 KB  createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes + presets/getPreset/registerPreset/listPresets
+  ./parallax  1.63 KB  createParallaxState, addParallaxLayer, removeParallaxLayer, updateParallax, getLayerScroll, applyParallaxLayer, WrapMode, withParallax
+  ./bounds    1.55 KB  createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds, clampToBounds, BoundsType
   ./multi     0.89 KB  createMultiTargetState, updateMultiTarget
   ./follow    0.71 KB  FollowMode, FOLLOW_STRATEGIES
-  ./sequence  7.27 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake, withSequences  (drags lite-timeline + lite-ease by design -- the only subpath that does)
-  ./debug     2.04 KB  createDebugHUDConfig, drawDebugHUD, drawDebugWorld, withDebug
-  .           15.62 KB class + the 20-name root surface (no parallax/sequence/debug/presets -- v2.0.0 detach)
+  ./sequence  7.41 KB  createCameraSequence, panTo, dramaticZoom, bossReveal, timedShake, withSequences  (drags lite-timeline + lite-ease by design -- the only subpath that does)
+  ./debug     2.10 KB  createDebugHUDConfig, drawDebugHUD, drawDebugWorld, withDebug
+  .           17.68 KB class + the 22-name root surface (no parallax/sequence/debug/presets -- v2.0.0 detach; clampToBounds + setSoftZone joined at 2.1.0)
 Self-reference example (shake only):
   import { createShakeState, addShake, updateShake, computeShake, getPreset } from '@zakkster/lite-camera-pro/shake';
 
@@ -230,6 +268,20 @@ Error codes (all throw a house-style Error with a .code):
                       integer in [0, targets.length].
 - ERR_SHAKE_PRESET    registerPreset(name, profile): non-empty string name + object profile
                       (setup path fails loud).
+- ERR_SHAKE_PROFILE   shake(profile)/addShake: a null/undefined profile is a documented
+                      no-op (the guarded getPreset idiom stays valid); any OTHER non-object
+                      (string, number, boolean, function, array) is a caller error.
+- ERR_CAMERA_SHAKE    shakeTrauma/shakeMaxOffset/shakeMaxAngle setters (the base-shake
+                      bridge, CP-9): the assigned value must be finite. shakeTrauma <= 0
+                      deactivates the default slot; > 0 assigns min(1, v).
+- ERR_CAMERA_BOUNDS   setBoundsType/setBoundsEdges (and ./bounds setBoundsAll/setBoundsEdges):
+                      each edge type must be an integer BoundsType in [0, 3]; setBoundsRect
+                      args and setSoftZone (softZone >= 0) must be finite. Validated before
+                      any write (a rejected call mutates nothing).
+- ERR_PARALLAX_TILE   addParallaxLayer: a REPEAT wrap mode requires a finite tile size > 0
+                      for the wrapped axis (tileW for REPEAT_X/BOTH, tileH for REPEAT_Y/BOTH);
+                      wrap itself an integer WrapMode in [0, 3]. Fail closed on both add
+                      paths (silently-unwrapped was the CP-10a defect).
 - ERR_SEQUENCE_OPTIONS  createCameraSequence / cam.createSequence({ blendOutTime }): blendOutTime
                       must be a finite number >= 0 SECONDS (0 legal = hard handoff). Validated
                       once at construction (a cold setup-time door).
@@ -248,5 +300,7 @@ shakePreset() was removed at v2.0.0 (no throwing tombstone); use the guarded get
 ## Notes
 - Migration: CinematicCameraPro is a drop-in superset of lite-camera's CinematicCamera. From
   1.x, add withParallax/withSequences/withDebug for those subsystems and swap cam.shakePreset(n, i)
-  for `const p = getPreset(n); if (p) cam.shake(p, i)` (getPreset from ./shake).
+  for `const p = getPreset(n); if (p) cam.shake(p, i)` (getPreset from ./shake). The base shake
+  fields bridge (CP-9): shakeTrauma/shakeMaxOffset/shakeMaxAngle behave as documented by
+  lite-camera. resize() is zoom-aware and the four dims are readonly (write via resize()).
 - Zero-GC: coordinate conversion uses caller-owned out objects; visible dims are cached properties (no getVisibleArea()); shake (8) and parallax (16) slots are pre-allocated and reused.

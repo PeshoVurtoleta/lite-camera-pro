@@ -460,7 +460,12 @@ test('own-key sweep: 2.0.0 Pro-layer keys equal the 1.3.0 set plus exactly one n
 
     const added = proOnly2_0_0.filter((k) => !PRO_LAYER_KEYS_1_3_0.includes(k));
     const removed = PRO_LAYER_KEYS_1_3_0.filter((k) => !proOnly2_0_0.includes(k));
-    assert.deepEqual(added, ['_parallaxTick'], 'exactly one new Pro-layer own key vs 1.3.0');
+    // PRO4 (v2.1.0) adds three cold instance fields for hidden-class stability:
+    // _baseMaxOffset/_baseMaxAngle back the CP-9 base-shake bridge accessors
+    // (D3), _destroyed is the CP-20 re-entrant-destroy guard (D4). Plus the
+    // 2.0.0 detach's _parallaxTick.
+    assert.deepEqual(added, ['_baseMaxAngle', '_baseMaxOffset', '_destroyed', '_parallaxTick'],
+        'exactly the PRO4 base-bridge + destroy-guard fields plus the detach tick fn vs 1.3.0');
     assert.deepEqual(removed, [], 'no 1.3.0 Pro-layer key may be removed by the detach');
 
     assert.equal(cam._parallax, null, 'the ParallaxState build (CP-22) must be gone');
@@ -576,7 +581,8 @@ test('D4 migration idiom, verbatim from CHANGELOG, executed exactly as written: 
     camB.destroy();
 });
 
-test('probe-pinned: cam.shake(null) still raw-TypeErrors (CP-25, ledgered to PRO4, NOT fixed this session) -- the D4 guard is mandatory, not stylistic', () => {
+// flipped by PRO4 (v2.1.0)
+test('CP-25 (flipped by PRO4 (v2.1.0)): cam.shake(null) is a documented no-op -- the D4 migration guard is now optional, never wrong', () => {
     const cam = freshCam();
     let threw = null;
     try {
@@ -584,7 +590,11 @@ test('probe-pinned: cam.shake(null) still raw-TypeErrors (CP-25, ledgered to PRO
     } catch (e) {
         threw = e;
     }
-    assert.ok(threw instanceof TypeError, 'MEASURED: cam.shake(null) is still a raw TypeError in 2.0.0 (CP-25 out of scope)');
-    assert.equal(threw.code, undefined);
+    assert.equal(threw, null, 'cam.shake(null) no longer throws: null/undefined profile is a documented no-op (CP-25 door)');
+    assert.equal(cam._shake.active, false, 'a null-profile shake fires nothing');
+    // A non-null non-object is still a caller error (ERR_SHAKE_PROFILE).
+    let threw2 = null;
+    try { cam.shake('boom'); } catch (e) { threw2 = e; }
+    assert.equal(threw2 && threw2.code, 'ERR_SHAKE_PROFILE', 'a non-object profile is a named error, not a raw crash');
     cam.destroy();
 });

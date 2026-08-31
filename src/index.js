@@ -6,10 +6,11 @@
  * Zero external dependencies outside the @zakkster ecosystem.
  */
 
-export const VERSION = "2.0.0";
+export const VERSION = "2.1.0";
 
-// v2.0.0 detach (CP-21/CP-22/CP-23): the root barrel exports exactly the 20
-// names the class itself reaches (D5). The four detached subsystems --
+// v2.0.0 detach (CP-21/CP-22/CP-23): the root barrel exports exactly the 22
+// names the class itself reaches (D5; clampToBounds + setSoftZone joined at
+// 2.1.0 when the class started reaching them). The four detached subsystems --
 // ShakePresets, CameraSequence, ParallaxManager, DebugHUD -- are NOT re-exported
 // here; a root barrel line would keep them in the "." import graph and defeat
 // the sever (G1). Reach them on their subpaths: ./shake (presets), ./sequence,
@@ -29,4 +30,4 @@ export { createMultiTargetState, updateMultiTarget } from './MultiTarget.js';
 export { createShakeState, addShake, addTraumaSimple, updateShake, computeShake, clearShakes } from './ShakeEngine.js';
 
 // -- Bounds --
-export { BoundsType, createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, clearBoundsRect, applyBounds } from './BoundsSystem.js';
+export { BoundsType, createBoundsState, setBoundsAll, setBoundsEdges, setBoundsRect, setSoftZone, clearBoundsRect, applyBounds, clampToBounds } from './BoundsSystem.js';

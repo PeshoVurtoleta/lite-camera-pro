@@ -134,4 +134,55 @@ export async function run() {
         check(rafCount() === c0, () => `T7 CP-5 conservation: rafCount grew by ${rafCount() - c0} across 4 pumps ` +
             `after stop()+destroy() -- a shared ticker was not released (CP-5 leak)`);
     }
+
+    // -- PRO4/T-J CP-24 play-to-NATURAL-COMPLETION churn ---------------------
+    // Unlike the CP-5 block (explicit stop()), here every sequence is allowed to
+    // COMPLETE on its own; the camera's completion-cleanup branch is what must
+    // release the ticker (duck-typed seq.stop()), driven by a single update()
+    // AFTER completion. No explicit stop()/destroy() of the sequence. After the
+    // churn, the settle window must be RAF-quiet -- proof the CP-24 fix releases
+    // the ticker on completion alone, and the retention tracker returns to 0.
+    {
+        const compLeaks = [];
+        const ctracker = createLeakTracker({
+            name: 'campro-cp24',
+            onLeak: (r) => compLeaks.push(r.kind + ':' + String(r.tag)),
+            onWarning: () => {},
+        });
+        ctracker.registerKernel(createOwnerCascadeOrphanKernel());
+
+        const N = 256;
+        for (let i = 0; i < N; i++) {
+            const owner = effect(() => {
+                const cam = makeCam(800, 600, 3200, 2400, i & 255);
+                const seq = cam.createSequence({ blendOutTime: (i & 1) ? 0 : 0.2 })
+                    .moveTo(400 + (i & 63), 300, 80);
+                cam.playSequence(seq);
+                // Drive to natural completion, then ONE update to run the
+                // completion cleanup (which releases the ticker, CP-24).
+                for (let g = 0; g < 200 && seq.playing; g++) pumpRaf();
+                cam.update(1 / 60, 500, 400, 0, 0);
+                ctracker.track(cam, releaseNoop, 'cp24-camera', { audit: true });
+                cam.destroy();
+            });
+            dispose(owner);
+        }
+
+        globalThis.gc?.();
+        await new Promise((r) => setTimeout(r, 50));
+        globalThis.gc?.();
+        await new Promise((r) => setTimeout(r, 50));
+
+        const clive = ctracker.size();
+        const cfindings = ctracker.audit();
+        check(clive === 0, () => `T7 CP-24: tracker retained ${clive} camera(s) after ${N} play-to-completion cycles` +
+            (compLeaks.length ? ' (onLeak: ' + compLeaks.slice(0, 3).join(', ') + ')' : ''));
+        check(cfindings.length === 0, () => `T7 CP-24: ${cfindings.length} retention finding(s): ` +
+            cfindings.map((f) => f.kind + ':' + f.reason).join(', '));
+
+        const q0 = rafCount();
+        pumpRaf(); pumpRaf(); pumpRaf(); pumpRaf();
+        check(rafCount() === q0, () => `T7 CP-24 conservation: rafCount grew by ${rafCount() - q0} across 4 settle pumps ` +
+            `after NATURAL completion -- the completion cleanup did not release the ticker`);
+    }
 }

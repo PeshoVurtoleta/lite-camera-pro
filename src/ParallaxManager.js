@@ -45,10 +45,50 @@ function createLayer() {
         // Wrap mode
         wrap:    WrapMode.NONE,
 
+        // Tile size (world-space px) for wrapped axes. 0 until a wrapped layer
+        // sets it; the addParallaxLayer door guarantees > 0 whenever the wrap
+        // mode needs it, so updateParallax's modulo never divides by zero (D2).
+        tileW:   0,
+        tileH:   0,
+
         // Computed scroll position (updated each frame)
         scrollX: 0,
         scrollY: 0,
     };
+}
+
+// D2 (fail closed): validate the EFFECTIVE wrap/tile the opts would produce for
+// this slot BEFORE any field is written. A REPEAT_X/BOTH layer needs a finite
+// tileW > 0; REPEAT_Y/BOTH needs a finite tileH > 0; wrap itself must be an
+// integer WrapMode 0..3. Silently-unwrapped was the CP-10a defect, and a no-op
+// default would re-ship it -- so a wrap with no tile is a named error naming the
+// missing field, nothing mutated. `layer` is the existing slot on the
+// update-existing path (its current wrap/tile are the fallback) or null on the
+// new-slot path (defaults NONE/0). Cold, setup-time only.
+function _validateTile(layer, opts, id) {
+    let wrap  = layer ? layer.wrap  : WrapMode.NONE;
+    let tileW = layer ? layer.tileW : 0;
+    let tileH = layer ? layer.tileH : 0;
+    if (opts) {
+        if (opts.wrap  !== undefined) wrap  = opts.wrap;
+        if (opts.tileW !== undefined) tileW = opts.tileW;
+        if (opts.tileH !== undefined) tileH = opts.tileH;
+    }
+    if (!Number.isInteger(wrap) || wrap < 0 || wrap > 3) {
+        const e = new Error("addParallaxLayer: wrap must be an integer WrapMode in [0, 3] for layer '" + id + "'");
+        e.code = "ERR_PARALLAX_TILE";
+        throw e;
+    }
+    if ((wrap === WrapMode.REPEAT_X || wrap === WrapMode.REPEAT_BOTH) && !(Number.isFinite(tileW) && tileW > 0)) {
+        const e = new Error("addParallaxLayer: wrap REPEAT_X/REPEAT_BOTH requires a finite tileW > 0 for layer '" + id + "'");
+        e.code = "ERR_PARALLAX_TILE";
+        throw e;
+    }
+    if ((wrap === WrapMode.REPEAT_Y || wrap === WrapMode.REPEAT_BOTH) && !(Number.isFinite(tileH) && tileH > 0)) {
+        const e = new Error("addParallaxLayer: wrap REPEAT_Y/REPEAT_BOTH requires a finite tileH > 0 for layer '" + id + "'");
+        e.code = "ERR_PARALLAX_TILE";
+        throw e;
+    }
 }
 
 /**
@@ -89,11 +129,14 @@ export function addParallaxLayer(state, id, speedX, speedY, opts) {
     for (let i = 0; i < state.layerCount; i++) {
         if (state.layers[i].active && state.layers[i].id === id) {
             const layer = state.layers[i];
+            _validateTile(layer, opts, id); // door: validate before any write
             layer.speedX = speedX;
             layer.speedY = speedY;
             if (opts) {
                 if (opts.offsetX !== undefined) layer.offsetX = opts.offsetX;
                 if (opts.offsetY !== undefined) layer.offsetY = opts.offsetY;
+                if (opts.tileW !== undefined)   layer.tileW   = opts.tileW;
+                if (opts.tileH !== undefined)   layer.tileH   = opts.tileH;
                 if (opts.wrap !== undefined)    layer.wrap    = opts.wrap;
             }
             return layer;
@@ -104,12 +147,15 @@ export function addParallaxLayer(state, id, speedX, speedY, opts) {
     for (let i = 0; i < state.layerCount; i++) {
         if (!state.layers[i].active) {
             const layer = state.layers[i];
+            _validateTile(null, opts, id); // door: validate before any write
             layer.active  = true;
             layer.id      = id;
             layer.speedX  = speedX;
             layer.speedY  = speedY;
             layer.offsetX = (opts && opts.offsetX) || 0;
             layer.offsetY = (opts && opts.offsetY) || 0;
+            layer.tileW   = (opts && opts.tileW)   || 0;
+            layer.tileH   = (opts && opts.tileH)   || 0;
             layer.wrap    = (opts && opts.wrap)    || WrapMode.NONE;
             layer.scrollX = 0;
             layer.scrollY = 0;
@@ -156,6 +202,26 @@ export function updateParallax(state, camX, camY, zoom) {
         // Zoom scaling: faster layers should scale more with zoom
         layer.scrollX = camX * layer.speedX * zoom + layer.offsetX;
         layer.scrollY = camY * layer.speedY * zoom + layer.offsetY;
+
+        // CP-10a: wrap the scroll into tile space (D2). NONE layers are
+        // byte-identical -- the two assignments above are unchanged and run
+        // first; only a wrapped layer pays the single `wrap !== 0` compare, then
+        // the negative-safe Euclidean modulo `s - floor(s / tile) * tile` (result
+        // in [0, tile) for every finite s; the door guarantees tile > 0, so no
+        // NaN route exists). The wrapped value is written back into
+        // scrollX/scrollY -- one source of truth, so getLayerScroll and
+        // applyParallaxLayer emit wrapped values with zero added code.
+        if (layer.wrap !== 0) {
+            const w = layer.wrap;
+            if (w === WrapMode.REPEAT_X || w === WrapMode.REPEAT_BOTH) {
+                const t = layer.tileW;
+                layer.scrollX = layer.scrollX - Math.floor(layer.scrollX / t) * t;
+            }
+            if (w === WrapMode.REPEAT_Y || w === WrapMode.REPEAT_BOTH) {
+                const t = layer.tileH;
+                layer.scrollY = layer.scrollY - Math.floor(layer.scrollY / t) * t;
+            }
+        }
     }
 }
 

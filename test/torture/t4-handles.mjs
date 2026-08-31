@@ -148,4 +148,66 @@ export async function run() {
             () => `T4/CP-5: mid-sequence stopSequence left a live ticker (rafCount grew by ${rafCount() - c0})`);
         cam.destroy();
     }
+
+    // --- PRO4/T-J CP-20: re-entrant destroy() from user callbacks -----------
+    // A camera destroyed mid-frame from a synchronous user callback must never
+    // raw-crash: the abort is a clean no-op or a named ERR_CAMERA_DESTROYED.
+    // (a) from a zoom-ease callback (the ledgered repro).
+    {
+        const cam = makeCam(800, 600, 3200, 2400, 7);
+        cam.setZoom(2, 0.5, (t) => { cam.destroy(); return t; });
+        let code = 'none', raw = false;
+        try { cam.update(0.1, 100, 100, 0, 0); }
+        catch (e) { raw = e instanceof TypeError && e.code === undefined; code = e.code; }
+        check(!raw, () => `T4/CP-20: destroy-from-zoom-ease raw-crashed (code ${String(code)})`);
+        expectDeadCode(() => cam.update(1 / 60, 0, 0, 0, 0), 'update after mid-ease destroy');
+    }
+    // (b) from a sequence .call(fn) step and (c) from onComplete: never raw.
+    {
+        for (const mode of ['call', 'onComplete']) {
+            const cam = makeCam(800, 600, 3200, 2400, 8);
+            let seq;
+            if (mode === 'call') {
+                seq = cam.createSequence().moveTo(200, 200, 32).call(() => cam.destroy());
+            } else {
+                seq = cam.createSequence({ onComplete: () => cam.destroy() }).moveTo(200, 200, 32);
+            }
+            cam.playSequence(seq);
+            let raw = false;
+            try { for (let g = 0; g < 200 && !cam._destroyed; g++) { pumpRaf(); if (!cam._destroyed) cam.update(1 / 60, 200, 200, 0, 0); } }
+            catch (e) { raw = e instanceof TypeError && e.code === undefined; }
+            check(!raw, () => `T4/CP-20: destroy-from-${mode} raw-crashed`);
+            // the camera is inert afterward regardless of path.
+            expectDeadCode(() => cam.update(1 / 60, 0, 0, 0, 0), `update after destroy-from-${mode}`);
+        }
+    }
+
+    // --- PRO4/T-J new door garbage: every door rejects + mutates nothing -----
+    {
+        const cam = makeCam(800, 600, 3200, 2400, 11);
+        const before = poseOf(cam);
+        // CP-25 shake door: null/undefined no-op; other non-object -> ERR_SHAKE_PROFILE.
+        for (const noop of [null, undefined]) {
+            let threw = false; try { cam.shake(noop); } catch { threw = true; }
+            check(!threw, () => 'T4/CP-25: shake(' + String(noop) + ') must be a no-op');
+        }
+        for (const bad of ['boom', 42, true, [1], () => {}]) {
+            expectCode(() => cam.shake(bad), 'ERR_SHAKE_PROFILE', 'shake(' + typeof bad + ')');
+        }
+        // CP-26 bounds doors.
+        for (const bad of [999, -1, 1.5, NaN, '2']) {
+            expectCode(() => cam.setBoundsType(bad), 'ERR_CAMERA_BOUNDS', 'setBoundsType(' + String(bad) + ')');
+        }
+        expectCode(() => cam.setBoundsEdges({ left: 0, bottom: 7 }), 'ERR_CAMERA_BOUNDS', 'setBoundsEdges bad bottom');
+        expectCode(() => cam.setBoundsRect(0, 0, NaN, 10), 'ERR_CAMERA_BOUNDS', 'setBoundsRect NaN w');
+        expectCode(() => cam.setSoftZone(-5), 'ERR_CAMERA_BOUNDS', 'setSoftZone(-5)');
+        expectCode(() => cam.setSoftZone(Infinity), 'ERR_CAMERA_BOUNDS', 'setSoftZone(Infinity)');
+        samePose(before, poseOf(cam), 'a rejected PRO4 door');
+        // bridge door: non-finite accessor writes -> ERR_CAMERA_SHAKE.
+        expectCode(() => { cam.shakeTrauma = NaN; }, 'ERR_CAMERA_SHAKE', 'shakeTrauma = NaN');
+        expectCode(() => { cam.shakeMaxOffset = Infinity; }, 'ERR_CAMERA_SHAKE', 'shakeMaxOffset = Infinity');
+        expectCode(() => { cam.shakeMaxAngle = NaN; }, 'ERR_CAMERA_SHAKE', 'shakeMaxAngle = NaN');
+        check(cam._shake.active === false, () => 'T4: a rejected bridge write fired no shake');
+        cam.destroy();
+    }
 }

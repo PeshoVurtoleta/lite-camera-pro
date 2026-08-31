@@ -38,7 +38,17 @@ const SHAKE_GZ_BUDGET = 16384;      // bytes -- charter number, fixed.
 // 14.70 KB projection: gz of the removed subsystems (heavy on repeated string
 // literals) compresses well below their raw share, so the honest measured drop
 // is 36%, not 40%. Fixed at measured, never widened. See decisions/0004.
-const DOT_GZ_BUDGET = 16252;        // bytes -- 15996 measured + 256 slack.
+//
+// v2.1.0 (PRO4) raise, 15996 -> 18109 B measured: the "." graph
+// (CinematicCameraPro + BoundsSystem + ShakeEngine) gained real feature code --
+// the CP-6 SOFT hold-out rewrite + clampToBounds + the CP-26 bounds doors
+// (BoundsSystem), the CP-7 zoom-aware resize override, the CP-9 base-shake
+// bridge accessors, the CP-20 re-entrant-destroy guard, and the CP-25 shake
+// door (ShakeEngine). The detach is intact (parallax/sequence/debug stay out of
+// "." -- import-graph + bundle-literals still green); this is new surface, not
+// re-entangling. Re-measured + 0.25 KB slack, never widened to pass. See
+// decisions/0005-0008 and the v2.1.0 CHANGELOG.
+const DOT_GZ_BUDGET = 18365;        // bytes -- 18109 measured + 256 slack.
 const NOISE_SOURCE_BYTES = 39613;   // Noise.js source size.
 const NOISE_SHARE_TRIGGER = 0.5;    // >= 50% -> upstream regression.
 

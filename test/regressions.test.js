@@ -12,7 +12,10 @@ import {
     CinematicCameraPro, FollowMode,
     createShakeState, addShake, addTraumaSimple, updateShake, computeShake,
     createMultiTargetState,
+    createBoundsState, setBoundsAll, setBoundsRect, setSoftZone, applyBounds,
+    clampToBounds, BoundsType,
 } from '../src/index.js';
+import { createParallaxState, addParallaxLayer, updateParallax, WrapMode } from '../src/ParallaxManager.js';
 import { PUBLIC_METHODS, callByName } from './torture/public-surface.mjs';
 import { pumpRaf, rafCount, makeCam } from './helpers.mjs'; // RAF polyfill + pump (CP-5) + v2.0.0 attach
 import { getPreset } from '../src/ShakePresets.js'; // v2.0.0: presets moved to ./shake
@@ -614,4 +617,260 @@ test('A6/H-C: 600-frame no-sequence stream is byte-identical to the 1.2.0 fixtur
         }
     }
     cam.destroy();
+});
+
+// =============================================================================
+// PRO4 (v2.1.0) -- subsystem truth. One named test per finding CP-6/7/9/10a/
+// 20/24/25/26, plus the T-D3 box-agreement sweep and the D3 H-G source gate.
+// Each would FAIL if its fix were reverted.
+// =============================================================================
+
+function xorshift(seed) {
+    let x = (seed >>> 0) || 1;
+    return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x >>> 0; };
+}
+
+// -----------------------------------------------------------------------------
+// CP-6 -- SOFT bounds decelerate (hold a half-zone back), never accelerate into
+//   the edge. Revert to the old smoothstep map and the granted position is
+//   NEARER the edge than requested (val 40 -> 20 instead of 50).
+// -----------------------------------------------------------------------------
+test('CP-6: SOFT bounds hold-out -- granted never nearer the edge than requested', () => {
+    const b = createBoundsState();
+    setBoundsAll(b, BoundsType.SOFT);
+    setSoftZone(b, 80);
+    // subsystem level, min edge 0: the inverted P4 numbers.
+    const cases = [[40, 50.0], [20, 42.5], [79, 79.006], [-5, 40.0]];
+    for (const [val, want] of cases) {
+        const t = new Float32Array([val, 0]);
+        const p = new Float32Array([val, 0]);
+        applyBounds(b, t, p, 4000, 4000, 100, 100, 1 / 60);
+        assert.ok(Math.abs(t[0] - want) < 0.02, 'SOFT val ' + val + ' -> ' + t[0] + ' want ~' + want);
+        assert.ok(t[0] >= val - 1e-4 || val <= 0, 'SOFT grant ' + t[0] + ' must not be nearer edge than requested ' + val);
+    }
+    // class geometry: rect(600,400,1600,1200), view 800x600 zoom 1, req 640 -> 650.
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    cam.setBoundsType(BoundsType.SOFT);
+    cam.setBoundsRect(600, 400, 1600, 1200);
+    const t2 = new Float32Array([640, 700]);
+    const p2 = new Float32Array([640, 700]);
+    applyBounds(cam._bounds, t2, p2, cam._maxX, cam._maxY, cam.visibleW, cam.visibleH, 1 / 60);
+    assert.ok(Math.abs(t2[0] - 650) < 0.02, 'class SOFT req 640 -> ' + t2[0] + ' want 650 (old map: 620)');
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// CP-7 -- zoom-aware resize. Revert (drop the Pro override) and pos is yanked to
+//   the zoom-unaware base max (1600) with a stale visibleW.
+// -----------------------------------------------------------------------------
+test('CP-7: resize is zoom-aware -- pos re-clamps to 2400, visibleW 800 on return', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 1);
+    cam.setZoom(2);
+    cam.pos[0] = 2560; cam.pos[1] = 0; cam.target[0] = 2560; cam.target[1] = 0;
+    const ret = cam.resize(1600, 1200, 3200, 2400);
+    assert.equal(ret, cam, 'resize returns this');
+    assert.equal(cam.visibleW, 800, 'visibleW is viewW/zoom on return, not stale');
+    assert.equal(cam._maxX, 2400, '_maxX is the zoom-aware max');
+    assert.equal(cam.pos[0], 2400, 'pos re-clamped to the zoom-aware max (base alone: 1600)');
+    // rejected resize (base ERR_CAMERA_DIMS) mutates nothing on either side.
+    let threw = null;
+    try { cam.resize(0, 100, 100, 100); } catch (e) { threw = e; }
+    assert.equal(threw && threw.code, 'ERR_CAMERA_DIMS', 'a bad dim throws base ERR_CAMERA_DIMS');
+    assert.equal(cam.viewW, 1600, 'a rejected resize left the dims untouched');
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// CP-9 -- the base shake fields bridge to the default omni slot. Revert (remove
+//   the accessors) and shakeMaxOffset/shakeTrauma are dead (apply emits 0).
+// -----------------------------------------------------------------------------
+test('CP-9: base shake fields bridge to the default slot', () => {
+    const cam = new CinematicCameraPro(800, 600, 3200, 2400, 42);
+    assert.equal(cam.shakeMaxOffset, 15, 'default bridge maxOffset is the base 15');
+    assert.equal(cam.shakeMaxAngle, 0.05, 'default bridge maxAngle is the base 0.05');
+    assert.equal(cam.shakeTrauma, 0, 'no active slot -> trauma reads 0');
+    cam.shakeMaxOffset = 60;
+    assert.equal(cam._shake.active, false, 'writing a max field alone fires no shake');
+    cam.shakeTrauma = 1;
+    assert.equal(cam.shakeTrauma, 1, 'trauma set assigns (not accumulates)');
+    assert.equal(cam._baseSlot().maxOffset, 60, 'the configured maxOffset stamped onto the fired slot');
+    cam.update(1 / 60, 0, 0, 0, 0);
+    let firstX = null;
+    cam.apply({ translate(x) { if (firstX === null) firstX = x; }, rotate() {}, scale() {} });
+    assert.notEqual(firstX, 0, 'a bridged shake produces a nonzero apply offset (2.0.0: dead, 0)');
+    // non-finite -> ERR_CAMERA_SHAKE; trauma <= 0 deactivates.
+    assert.throws(() => { cam.shakeTrauma = NaN; }, (e) => e.code === 'ERR_CAMERA_SHAKE');
+    assert.throws(() => { cam.shakeMaxAngle = Infinity; }, (e) => e.code === 'ERR_CAMERA_SHAKE');
+    cam.shakeTrauma = 0;
+    assert.equal(cam._shake.active, false, 'trauma <= 0 deactivates the default slot');
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// CP-10a -- WrapMode wraps. Revert (remove the wrap block) and scrollX is the
+//   raw unwrapped scroll. Door: a REPEAT mode with no tile is ERR_PARALLAX_TILE.
+// -----------------------------------------------------------------------------
+test('CP-10a: WrapMode wraps scroll into tile space; missing tile is ERR_PARALLAX_TILE', () => {
+    const st = createParallaxState();
+    addParallaxLayer(st, 'bg', 1, 1, { wrap: WrapMode.REPEAT_X, tileW: 256 });
+    updateParallax(st, 3 * 256 + 7, 0, 1);
+    assert.equal(st.layers[0].scrollX, 7, 'REPEAT_X at 3*tile+7 wraps to 7');
+    updateParallax(st, -9, 0, 1);
+    assert.equal(st.layers[0].scrollX, 247, 'negative scroll wraps positive (-9 -> 247)');
+    // NONE layer is byte-identical (raw scroll).
+    addParallaxLayer(st, 'fg', 2, 2);
+    updateParallax(st, 100, 50, 1);
+    assert.equal(st.layers[1].scrollX, 200, 'NONE layer scroll is the raw camX*speed');
+    // door: both add paths, missing tile.
+    assert.throws(() => addParallaxLayer(st, 'x', 1, 1, { wrap: WrapMode.REPEAT_Y }),
+        (e) => e.code === 'ERR_PARALLAX_TILE', 'new-slot REPEAT_Y with no tileH throws');
+    assert.throws(() => addParallaxLayer(st, 'bg', 1, 1, { wrap: WrapMode.REPEAT_BOTH, tileW: 256 }),
+        (e) => e.code === 'ERR_PARALLAX_TILE', 'update-existing REPEAT_BOTH with no tileH throws');
+    // fail-closed: nothing mutated by the rejected update.
+    assert.equal(st.layers[0].wrap, WrapMode.REPEAT_X, 'the rejected update left the layer wrap unchanged');
+});
+
+// -----------------------------------------------------------------------------
+// CP-20 -- a re-entrant destroy() from a zoom-ease callback must not raw-crash.
+//   Revert (remove the _destroyed check) and update() null-derefs FollowMode.
+// -----------------------------------------------------------------------------
+test('CP-20: re-entrant destroy() from a zoom-ease callback is a clean no-op, never a raw crash', () => {
+    const cam = makeCam(800, 600, 3200, 2400, 42);
+    cam.setZoom(2, 0.5, (t) => { cam.destroy(); return t; });
+    let threw = null;
+    try { cam.update(0.1, 100, 100, 0, 0); } catch (e) { threw = e; }
+    assert.ok(threw === null || threw.code === 'ERR_CAMERA_DESTROYED',
+        'update after a mid-ease destroy is a clean no-op or a named error, never a raw TypeError');
+    // the camera is inert afterward.
+    assert.throws(() => cam.update(1 / 60, 0, 0, 0, 0), (e) => e.code === 'ERR_CAMERA_DESTROYED');
+});
+
+// -----------------------------------------------------------------------------
+// CP-24 -- natural completion releases the shared-ticker ref via the camera-side
+//   duck-typed stop(). Revert (drop the stop() call) and the ticker leaks.
+// -----------------------------------------------------------------------------
+test('CP-24: completion releases the ticker; zero-step play() acquires nothing', () => {
+    const cam = makeCam(800, 600, 3200, 2400, 9);
+    cam.setMode(FollowMode.PREDICTIVE);
+    const seq = cam.createSequence({ blendOutTime: 0.2 }).moveTo(500, 400, 100);
+    cam.playSequence(seq);
+    assert.ok(pumpToCompletion(seq), 'must complete');
+    cam.update(1 / 60, 100, 100, 0, 0); // completion cleanup -> duck-typed stop()
+    assert.equal(cam._seq, null, 'cam._seq nulled by cleanup');
+    const before = rafCount();
+    pumpRaf(); pumpRaf();
+    assert.equal(rafCount(), before, 'the ticker was released -- no re-request after completion');
+    // replay from the live snapshot still works (H-E).
+    seq.play();
+    assert.equal(seq.playing, true, 'a completed+released sequence replays via play()');
+    seq.stop();
+    // zero-step: play() is a documented no-op that acquires no timeline.
+    const empty = cam.createSequence();
+    const c0 = rafCount();
+    empty.play();
+    assert.equal(empty.playing, false, 'zero-step play() stays inert');
+    pumpRaf();
+    assert.equal(rafCount(), c0, 'zero-step play() acquires no ticker');
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// CP-25 -- shake(null)/addShake(null) is a documented no-op; other non-objects
+//   are ERR_SHAKE_PROFILE. Revert (drop the door) and shake(null) raw-crashes.
+// -----------------------------------------------------------------------------
+test('CP-25: shake(null) is a no-op; a non-object profile is ERR_SHAKE_PROFILE', () => {
+    const cam = makeCam(800, 600, 3200, 2400, 3);
+    assert.doesNotThrow(() => cam.shake(null), 'shake(null) is a no-op');
+    assert.doesNotThrow(() => cam.shake(undefined), 'shake(undefined) is a no-op');
+    assert.equal(cam._shake.active, false, 'a null-profile shake fires nothing');
+    for (const bad of ['boom', 42, true, () => {}, [1, 2]]) {
+        assert.throws(() => cam.shake(bad), (e) => e.code === 'ERR_SHAKE_PROFILE',
+            'a non-object profile (' + typeof bad + ') is ERR_SHAKE_PROFILE');
+    }
+    // the getPreset idiom stays valid: guard becomes optional, never wrong.
+    const p = getPreset('nope');
+    assert.equal(p, null);
+    assert.doesNotThrow(() => { if (p) cam.shake(p); });
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// CP-26 -- bounds setters fail closed on a garbage edge type / rect / softZone.
+//   Revert (drop the doors) and a type 999 stores silently and no-op-enforces.
+// -----------------------------------------------------------------------------
+test('CP-26: bounds setters reject non-integer / out-of-range / non-finite input', () => {
+    const cam = makeCam(800, 600, 3200, 2400, 1);
+    for (const bad of [999, -1, 1.5, NaN, '1']) {
+        assert.throws(() => cam.setBoundsType(bad), (e) => e.code === 'ERR_CAMERA_BOUNDS', 'setBoundsType(' + bad + ')');
+    }
+    // validate-before-mutate: a bad edge in a config leaves ALL edges unchanged.
+    const before = { l: cam._bounds.left, r: cam._bounds.right };
+    assert.throws(() => cam.setBoundsEdges({ left: BoundsType.SOFT, right: 999 }),
+        (e) => e.code === 'ERR_CAMERA_BOUNDS');
+    assert.equal(cam._bounds.left, before.l, 'a rejected setBoundsEdges left "left" unchanged');
+    assert.equal(cam._bounds.right, before.r, 'a rejected setBoundsEdges left "right" unchanged');
+    // setBoundsRect finiteness; setSoftZone finite + >= 0.
+    assert.throws(() => cam.setBoundsRect(0, 0, NaN, 100), (e) => e.code === 'ERR_CAMERA_BOUNDS');
+    assert.throws(() => cam.setSoftZone(-1), (e) => e.code === 'ERR_CAMERA_BOUNDS');
+    assert.throws(() => cam.setSoftZone(Infinity), (e) => e.code === 'ERR_CAMERA_BOUNDS');
+    assert.doesNotThrow(() => cam.setSoftZone(0), 'softZone 0 is legal (degenerates SOFT to HARD)');
+    cam.destroy();
+});
+
+// -----------------------------------------------------------------------------
+// T-D3 -- clampToBounds derives the SAME min/max box applyBounds derives. 10k
+//   random states, all-HARD edges: the target clamp must agree exactly. This is
+//   the guard for the deliberate box-math duplication (D6).
+// -----------------------------------------------------------------------------
+test('T-D3: clampToBounds and applyBounds derive an identical box (10k random states)', () => {
+    const rnd = xorshift(0xC0FFEE);
+    const uf = () => rnd() / 0xffffffff;
+    for (let i = 0; i < 10000; i++) {
+        const b = createBoundsState();
+        setBoundsAll(b, BoundsType.HARD);
+        if (rnd() & 1) {
+            setBoundsRect(b, uf() * 2000 - 500, uf() * 2000 - 500, uf() * 4000, uf() * 3000);
+        }
+        const maxX = uf() * 5000, maxY = uf() * 4000;
+        const visW = 50 + uf() * 1500, visH = 50 + uf() * 1200;
+        const tx = uf() * 6000 - 1500, ty = uf() * 5000 - 1500;
+        const t1 = new Float32Array([tx, ty]); const p1 = new Float32Array([tx, ty]);
+        const t2 = new Float32Array([tx, ty]); const p2 = new Float32Array([tx, ty]);
+        applyBounds(b, t1, p1, maxX, maxY, visW, visH, 1 / 60);   // HARD clamps target
+        clampToBounds(b, t2, p2, maxX, maxY, visW, visH);          // HARD clamps target + pos
+        assert.ok(Object.is(t1[0], t2[0]) && Object.is(t1[1], t2[1]),
+            'box disagreement at i=' + i + ': applyBounds target (' + t1[0] + ',' + t1[1] +
+            ') != clampToBounds target (' + t2[0] + ',' + t2[1] + ')');
+    }
+});
+
+// -----------------------------------------------------------------------------
+// D3 H-G source gate -- the bridge accessor names must appear NOWHERE inside the
+//   hot bodies update()/apply() (class) and updateShake()/computeShake()
+//   (engine). If they leak into a hot body, the fast path would read them.
+// -----------------------------------------------------------------------------
+test('D3 H-G: bridge accessor names are absent from the hot bodies', () => {
+    const banned = /shakeTrauma|shakeMaxOffset|shakeMaxAngle|_baseMax/;
+    function methodBody(src, sigRe) {
+        const m = sigRe.exec(src);
+        assert.ok(m, 'method signature not found: ' + sigRe);
+        let i = src.indexOf('{', m.index);
+        let depth = 0, start = i;
+        for (; i < src.length; i++) {
+            const c = src[i];
+            if (c === '{') depth++;
+            else if (c === '}') { depth--; if (depth === 0) return src.slice(start, i + 1); }
+        }
+        throw new Error('unbalanced braces for ' + sigRe);
+    }
+    const proSrc = readFileSync(join(__dirname, '..', 'src', 'CinematicCameraPro.js'), 'utf8');
+    const engSrc = readFileSync(join(__dirname, '..', 'src', 'ShakeEngine.js'), 'utf8');
+    const updateBody = methodBody(proSrc, /\n    update\(dt, px, py/);
+    const applyBody = methodBody(proSrc, /\n    apply\(ctx\)/);
+    const updateShakeBody = methodBody(engSrc, /export function updateShake\(/);
+    const computeShakeBody = methodBody(engSrc, /export function computeShake\(/);
+    assert.ok(!banned.test(updateBody), 'update() body must not name a bridge accessor');
+    assert.ok(!banned.test(applyBody), 'apply() body must not name a bridge accessor');
+    assert.ok(!banned.test(updateShakeBody), 'updateShake() body must not name a bridge accessor');
+    assert.ok(!banned.test(computeShakeBody), 'computeShake() body must not name a bridge accessor');
 });

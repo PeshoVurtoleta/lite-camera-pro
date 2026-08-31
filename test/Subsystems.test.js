@@ -15,7 +15,7 @@
 // =============================================================================
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-// v2.0.0 detach: only the 20-name root surface (D5) still resolves from '.'.
+// v2.0.0 detach: only the 22-name root surface (D5; 22 since 2.1.0) still resolves from '.'.
 // The four detached subsystems are imported from their own module files (the
 // same files the ./debug, ./shake, ./parallax, ./sequence subpaths target --
 // one runtime identity, no fork).

@@ -226,45 +226,41 @@ test("6. resolveAt at:'>' duration pins (same-end-as-previous grammar token)", (
 });
 
 // -----------------------------------------------------------------------------
-// 7. Zero-step sequence. FINDING (see qa report): a played empty sequence
-//    NEVER completes -- lite-timeline's own completion gate requires
-//    `tracks.length > 0` (Timeline.js:135), so with zero tracks `allFinished`
-//    is computed but the completion branch is structurally unreachable.
-//    seq.playing stays true forever, the camera is permanently pinned to the
-//    (empty) sequence path, and the shared RAF ticker is held indefinitely
-//    until the caller explicitly stop()s/destroy()s. This test PINS that
-//    actual (surprising) behavior and proves stop()/destroy() are still safe
-//    escape hatches -- it does not patch src (out of scope for qa).
+// 7. Zero-step sequence (flipped by PRO4 (v2.1.0)). CP-24/D4 fixes the leak at
+//    the source: play() on a step-less sequence is now a documented no-op that
+//    NEVER acquires a timeline (lite-timeline gates completion on
+//    tracks.length > 0, so a built-but-empty timeline would pin the shared RAF
+//    ticker forever without ever self-completing). playing stays false, active
+//    stays false, no ticker is acquired, and stop()/destroy() remain safe.
 // -----------------------------------------------------------------------------
-test('7. zero-step sequence: play() never completes on its own; stop()/destroy() are safe and release the ticker', () => {
+test('7. zero-step sequence (flipped by PRO4 (v2.1.0)): play() is a documented no-op that acquires no timeline', () => {
     const cam = makeCam(800, 600, 3200, 2400, 1);
     const seq = cam.createSequence(); // no steps queued
     assert.equal(seq.duration, 0, 'an empty sequence has duration 0 before play()');
 
+    const c0 = rafCount();
     cam.playSequence(seq);
-    assert.equal(seq.playing, true, 'play() starts an empty sequence like any other');
-    assert.equal(seq.duration, 0, 'duration stays 0 (at-aware timeline.duration with zero tracks)');
+    assert.equal(seq.playing, false, 'flipped by PRO4 (v2.1.0): a zero-step play() stays inert, never "plays"');
+    assert.equal(seq._state.active, false, 'flipped by PRO4 (v2.1.0): the state is never activated');
+    assert.equal(rafCount(), c0, 'flipped by PRO4 (v2.1.0): no timeline is acquired, so the ticker never re-requests');
 
+    // Because the camera never enters the sequence path, normal follow runs and
+    // no blend can arm.
     let completedWithin = -1;
     for (let i = 0; i < 300; i++) {
         pumpRaf();
         cam.update(1 / 60, 100, 100, 0, 0);
-        if (!seq.playing) { completedWithin = i; break; }
+        if (seq.playing) { completedWithin = i; break; }
     }
-    assert.equal(completedWithin, -1, 'FINDING: a zero-step sequence never self-completes (tracks.length > 0 gate)');
-    assert.equal(cam._blendRemain, 0, 'no blend can arm because the completion wrapper never runs');
+    assert.equal(completedWithin, -1, 'a zero-step sequence never enters the playing state on its own');
+    assert.equal(cam._blendRemain, 0, 'no blend can arm because the empty sequence never activated');
 
-    // The ticker stays live (re-requests on every pump) for as long as it plays.
-    const before = rafCount();
-    pumpRaf();
-    assert.ok(rafCount() > before, 'the shared ticker keeps re-requesting while the empty sequence "plays" forever');
-
-    // stop() and destroy() must not throw, and stop() must release the ticker.
+    // stop()/destroy() are still safe no-ops on an inert zero-step sequence.
     assert.doesNotThrow(() => seq.stop());
-    assert.equal(seq.playing, false, 'stop() forces the zombie sequence out of the playing state');
-    const c0 = rafCount();
+    assert.equal(seq.playing, false, 'stop() leaves the inert sequence inert');
+    const c1 = rafCount();
     pumpRaf(); pumpRaf();
-    assert.equal(rafCount(), c0, 'stop() must release the ticker even for a zero-step sequence');
+    assert.equal(rafCount(), c1, 'no ticker was ever acquired, so pumping never grows the count');
     assert.doesNotThrow(() => seq.destroy());
 
     cam.destroy();
@@ -303,40 +299,46 @@ test('7. zero-step sequence: play() never completes on its own; stop()/destroy()
 //    finding; NOT patched here (out of scope for qa). This test cleans up its
 //    own repro via an explicit seq.destroy() so the suite stays leak-free.
 // -----------------------------------------------------------------------------
-test('8. FINDING: natural completion leaks the shared-ticker ref forever unless the app explicitly destroys the completed seq', () => {
+// flipped by PRO4 (v2.1.0)
+test('8. CP-24 (flipped by PRO4 (v2.1.0)): natural completion releases the shared-ticker ref via the camera-side duck-typed stop()', () => {
     const cam = makeCam(800, 600, 3200, 2400, 9);
     cam.setMode(FollowMode.PREDICTIVE);
     const seq = cam.createSequence({ blendOutTime: 0.2 }).moveTo(500, 400, 100);
     cam.playSequence(seq);
     assert.ok(pumpToCompletion(seq), 'must complete');
 
-    // Trigger the completion cleanup branch (nulls cam._seq) WITHOUT ever
-    // calling seq.stop() or seq.destroy() -- the pattern a normal app follows.
+    // The first post-completion frame runs the completion-cleanup branch, which
+    // now reads seq._state.blend, calls the duck-typed seq.stop() (destroying the
+    // timeline, dropping the shared-ticker refcount), then nulls cam._seq -- the
+    // CP-24 fix (decisions/0008). No app-side seq.destroy() is required.
     cam.update(1 / 60, 100, 100, 0, 0);
     assert.equal(cam._seq, null, 'cam._seq is nulled by the completion cleanup');
-    assert.equal(seq.playing, false, 'the sequence itself looks fully inert');
+    assert.equal(seq.playing, false, 'the sequence itself is fully inert');
+    // Blend was read BEFORE the duck-typed stop() zeroed it: had the read
+    // happened after stop(), _blendRemain would be 0. It is the armed 0.2 budget
+    // minus the one dt this same frame already glided (step 6).
+    assert.ok(cam._blendRemain > 0.18 && cam._blendRemain <= 0.2,
+        'blend was read BEFORE stop() zeroed it (armed 0.2, minus one dt glide this frame)');
 
-    // Destroy the camera the normal way an app would -- this CANNOT reach the
-    // orphaned seq any more (cam._seq was already null).
+    // Destroy the camera the normal way an app would.
     cam.destroy();
 
-    // Despite BOTH the camera and the sequence looking completely dead, the
-    // shared ticker keeps re-requesting on every pump: the refcount it
-    // acquired at createTimeline() time was never released.
+    // flipped by PRO4 (v2.1.0): the ticker was already released by the
+    // completion-cleanup stop(), so pumping no longer re-requests a frame.
     let stillLive = 0;
     for (let i = 0; i < 5; i++) {
         const before = rafCount();
         pumpRaf();
         if (rafCount() > before) stillLive++;
     }
-    assert.equal(stillLive, 5, 'FINDING: the shared ticker never stops on its own after natural completion + cam.destroy()');
+    assert.equal(stillLive, 0, 'flipped by PRO4 (v2.1.0): natural completion + cam.destroy() leaves the ticker released');
 
-    // The only escape hatch: the app must have kept its OWN reference to the
-    // sequence object and destroy it explicitly.
+    // An explicit seq.destroy() is now redundant but still safe -- the ticker
+    // stays released.
     seq.destroy();
     const c0 = rafCount();
     pumpRaf(); pumpRaf();
-    assert.equal(rafCount(), c0, 'explicit seq.destroy() is confirmed as the only way to release the leaked ref');
+    assert.equal(rafCount(), c0, 'flipped by PRO4 (v2.1.0): the ticker stays released');
 });
 
 // -----------------------------------------------------------------------------

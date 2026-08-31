@@ -47,7 +47,7 @@ const EXPECTED_KEYS = {
     ],
     './bounds': [
         'BoundsType', 'createBoundsState', 'setBoundsAll', 'setBoundsEdges',
-        'setBoundsRect', 'clearBoundsRect', 'applyBounds',
+        'setBoundsRect', 'setSoftZone', 'clearBoundsRect', 'applyBounds', 'clampToBounds',
     ],
     './multi': ['createMultiTargetState', 'updateMultiTarget'],
     './follow': ['FollowMode', 'FOLLOW_STRATEGIES'],
@@ -70,24 +70,25 @@ for (const [sub, keys] of Object.entries(EXPECTED_KEYS)) {
     });
 }
 
-test("'.' entry export-name set is exactly D5's 20-name detach surface (+ VERSION value)", () => {
-    // v2.0.0 detach (D5): the "." surface is trimmed to exactly the 20 names the
-    // class itself reaches -- the four subsystems (presets/sequence/parallax/
-    // debug) left the barrel for their subpaths. Kept in sync with t8-cross.mjs's
-    // ROOT_2_0_0 snapshot; if one drifts without the other, THIS test or the
-    // torture tier catches it. They must never both be edited blind.
-    const ROOT_2_0_0 = [
+test("'.' entry export-name set is exactly the 2.1.0 root surface (+ VERSION value)", () => {
+    // D5's rule (root = exactly the set the class reaches) is unchanged; PRO4
+    // (v2.1.0) grew the set the CLASS reaches by two BoundsSystem names, so the
+    // barrel grows with it: clampToBounds (the resize re-clamp export, D6) and
+    // setSoftZone (the CP-26 soft-zone door, D5). 20 -> 22. Kept in sync with
+    // t8-cross.mjs's ROOT_2_1_0 snapshot; if one drifts without the other, THIS
+    // test or the torture tier catches it. They must never both be edited blind.
+    const ROOT_2_1_0 = [
         'VERSION', 'CinematicCameraPro', 'default',
         'FollowMode', 'FOLLOW_STRATEGIES',
         'createMultiTargetState', 'updateMultiTarget',
         'createShakeState', 'addShake', 'addTraumaSimple', 'updateShake',
         'computeShake', 'clearShakes',
         'BoundsType', 'createBoundsState', 'setBoundsAll', 'setBoundsEdges',
-        'setBoundsRect', 'clearBoundsRect', 'applyBounds',
+        'setBoundsRect', 'setSoftZone', 'clearBoundsRect', 'applyBounds', 'clampToBounds',
     ];
-    assert.equal(ROOT_2_0_0.length, 20);
-    assert.deepEqual(Object.keys(mainEntry).sort(), [...ROOT_2_0_0].sort());
-    assert.equal(MAIN_VERSION, '2.0.0');
+    assert.equal(ROOT_2_1_0.length, 22);
+    assert.deepEqual(Object.keys(mainEntry).sort(), [...ROOT_2_1_0].sort());
+    assert.equal(MAIN_VERSION, '2.1.0');
 });
 
 // -----------------------------------------------------------------------------

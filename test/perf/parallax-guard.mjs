@@ -114,8 +114,76 @@ function measure(label, tick, parallaxSlot) {
     return { label, median, spread, means };
 }
 
+// ---------------------------------------------------------------------------
+// D2 (PRO4) wrap-compare A/B. The wrap block sits behind `if (layer.wrap !== 0)`
+// AFTER the two unchanged scroll assignments, so a NONE layer (wrap 0) pays only
+// that single compare. Measure it: two updateParallax variants that differ ONLY
+// by the wrap block, both driven over a full MAX_LAYERS pool of NONE layers so
+// the delta isolates the per-layer compare. The number lands in
+// decisions/0006-parallax-wrap.md.
+// ---------------------------------------------------------------------------
+import { createParallaxState, addParallaxLayer } from '../../src/ParallaxManager.js';
+
+const PX_ITERS = 2e7;
+
+// Variant A: NO wrap block (the 2.0.0 byte-for-byte tick body).
+function updateParallaxNoWrap(state, camX, camY, zoom) {
+    for (let i = 0; i < state.layerCount; i++) {
+        const layer = state.layers[i];
+        if (!layer.active) continue;
+        layer.scrollX = camX * layer.speedX * zoom + layer.offsetX;
+        layer.scrollY = camY * layer.speedY * zoom + layer.offsetY;
+    }
+}
+
+// Variant B: WITH the wrap block, but every layer is NONE (wrap 0) so the block
+// itself never runs -- only the `wrap !== 0` compare is paid per layer.
+function updateParallaxWrapCompare(state, camX, camY, zoom) {
+    for (let i = 0; i < state.layerCount; i++) {
+        const layer = state.layers[i];
+        if (!layer.active) continue;
+        layer.scrollX = camX * layer.speedX * zoom + layer.offsetX;
+        layer.scrollY = camY * layer.speedY * zoom + layer.offsetY;
+        if (layer.wrap !== 0) {
+            const w = layer.wrap;
+            if (w === 1 || w === 3) { const t = layer.tileW; layer.scrollX = layer.scrollX - Math.floor(layer.scrollX / t) * t; }
+            if (w === 2 || w === 3) { const t = layer.tileH; layer.scrollY = layer.scrollY - Math.floor(layer.scrollY / t) * t; }
+        }
+    }
+}
+
+function makeFullNoneState() {
+    const st = createParallaxState();
+    for (let i = 0; i < st.layerCount; i++) addParallaxLayer(st, 'L' + i, 0.5 + i * 0.05);
+    return st;
+}
+
+function runPx(tick) {
+    const st = makeFullNoneState();
+    let cx = 0, cy = 0;
+    const t0 = process.hrtime.bigint();
+    for (let i = 0; i < PX_ITERS; i++) {
+        cx = (cx + 1.7) % 8000;
+        cy = (cy + 1.3) % 6000;
+        tick(st, cx, cy, 1);
+    }
+    const t1 = process.hrtime.bigint();
+    return Number(t1 - t0) / PX_ITERS;
+}
+
+function measurePx(label, tick) {
+    const means = [];
+    for (let r = 0; r < RUNS; r++) { const ns = runPx(tick); if (r > 0) means.push(ns); globalThis.gc?.(); }
+    means.sort((x, y) => x - y);
+    const median = means.length % 2 ? means[(means.length - 1) >> 1] : (means[means.length / 2 - 1] + means[means.length / 2]) / 2;
+    const spread = means[means.length - 1] - means[0];
+    return { label, median, spread };
+}
+
 const a = measure('(i) null-compare', tickNullCompare, null);
 const b = measure('(ii) sentinel', tickSentinel, INERT_PARALLAX);
+const pxA = measurePx('A no-wrap-block', updateParallaxNoWrap);
+const pxB = measurePx('B wrap-compare (NONE layers)', updateParallaxWrapCompare);
 
 const delta = a.median - b.median; // how much (i) costs over (ii)
 const largerSpread = Math.max(a.spread, b.spread);
@@ -131,3 +199,12 @@ console.log('  (ii) sentinel     : median ' + f(b.median) + ' ns/op  spread ' + 
 console.log('  delta (i)-(ii)    : ' + f(delta) + ' ns/op   larger spread ' + f(largerSpread) + ' ns/op');
 console.log('  rule: (ii) iff delta > 1.0 AND delta > 3x spread (' + f(3 * largerSpread) + ')');
 console.log('  VERDICT: ' + verdict);
+
+const pxDelta = pxB.median - pxA.median; // per-16-layer-frame cost of the compare
+console.log('');
+console.log('D2 wrap-compare probe -- ' + PX_ITERS.toExponential(0) + ' iters/run over ' +
+    'a full 16-layer NONE pool');
+console.log('  A no-wrap-block          : median ' + f(pxA.median) + ' ns/op  spread ' + f(pxA.spread));
+console.log('  B wrap-compare (NONE x16): median ' + f(pxB.median) + ' ns/op  spread ' + f(pxB.spread));
+console.log('  delta B-A (16 compares)  : ' + f(pxDelta) + ' ns/frame  (~' + f(pxDelta / 16) + ' ns/layer)');
+console.log('  NONE layers stay byte-identical in output; the only new hot-body cost is this compare.');

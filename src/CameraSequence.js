@@ -414,6 +414,17 @@ export function createCameraSequence(cam, options = {}) {
         /** Build and start the sequence. Usually called via camera.playSequence(). */
         play() {
             if (isDestroyed) return seq;
+            // CP-24 (D4): a zero-step sequence has nothing to animate, and
+            // lite-timeline gates completion on tracks.length > 0 -- so a
+            // built-but-empty timeline would acquire the shared ticker and
+            // NEVER self-complete, pinning the RAF loop forever. Documented
+            // no-op: acquire no timeline, stay inert (playing false, active
+            // false). play() with steps queued replays normally.
+            if (steps.length === 0) {
+                isPlaying = false;
+                state.active = false;
+                return seq;
+            }
             // Always rebuild — each play() captures the current camera state.
             buildTimeline();
             state.active = true;

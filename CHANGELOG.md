@@ -6,6 +6,86 @@ Versioning. Version lives in three places at once -- `package.json`, the
 `VERSION` const in `src/index.js`, and the `Version:` header in `llms.txt` --
 bumped together or not at all.
 
+## [2.1.0] -- 2026-08-31
+
+Subsystem truth: four documented behaviors that were false are now measured
+behavior (CP-6, CP-7, CP-9, CP-10a), plus four fail-closed doors and two
+re-entrancy fixes (CP-20, CP-24, CP-25, CP-26). No attached feel outside the
+defects changed; the consumer fixture stays byte-green (H-A).
+
+### Added
+
+- `cam.resize(viewW, viewH, worldW, worldH)` -- a zoom-aware resize override
+  (CP-7). visibleW/_maxX are correct ON RETURN (no stale frame) and target AND
+  pos are HARD re-clamped into the zoom-aware box. P10 inverted: zoom 2, world
+  3200x2400, pos 2560, `resize(1600, 1200, 3200, 2400)` -> visibleW **800**,
+  _maxX **2400**, pos **2400** (base alone: 1600 and a stale 400).
+- Base-shake bridge (CP-9): `cam.shakeTrauma` / `cam.shakeMaxOffset` (15 px) /
+  `cam.shakeMaxAngle` (0.05 rad) are live accessors onto the default omni slot,
+  so a base-style caller's shake works on Pro. P8 inverted: `shakeMaxOffset = 60;
+  shakeTrauma = 1` now produces a nonzero apply offset (**0.784** vs a dead 0 in
+  2.0.0). Cold-path only; the 200k update+apply A/B is **102.4 ns/op** with the
+  accessors present, and the H-G source gate proves the names are absent from
+  the hot bodies.
+- Parallax `WrapMode` is real (CP-10a): `tileW`/`tileH` layer opts, a negative-
+  safe Euclidean wrap `s - floor(s/tile)*tile` written back into scrollX/scrollY.
+  A REPEAT_X layer, tileW 256, at 3*256+7 reads **7**; at -9 reads **247**. The
+  only new hot-body cost is one `wrap !== 0` compare, measured at **~1.72
+  ns/layer**; NONE layers stay byte-identical (wrap is subpath-only, not in ".").
+- `setSoftZone(state/cam, softZone, elasticMax?, elasticStrength?)` and
+  `clampToBounds(state, ...)` exports (root + ./bounds); the class reaches both,
+  so the "." surface grows 20 -> 22 names.
+- Four fail-closed error codes: `ERR_CAMERA_BOUNDS` (CP-26 bounds setters),
+  `ERR_PARALLAX_TILE` (CP-10a tile door), `ERR_SHAKE_PROFILE` (CP-25 non-object
+  profile), `ERR_CAMERA_SHAKE` (CP-9 non-finite accessor write).
+
+### Changed
+
+- **SOFT bounds now decelerate (CP-6).** The old smoothstep map compressed the
+  granted position TOWARD the edge (the inverse of the promise). The new
+  quadratic half-zone hold-out `g = edge + s*sz*0.5*(1 + u*u)` is monotone, fixed
+  at the zone entry, and NEVER nearer the edge than requested; only HARD reaches
+  the edge. P4 inverted (sz 80, edge 0): 40 -> **50.0** (was 20), 20 -> **42.5**
+  (was 3.13), 79 -> **79.01** (was 78.96). HARD/ELASTIC/NONE byte-identical.
+- Dims (viewW/viewH/worldW/worldH) are readonly in the d.ts (match the base);
+  write them only through `resize()`.
+- lite-camera dependency floor raised `^1.0.0` -> `^1.2.2` (the resize override
+  consumes the base's 1.2.x resize contract; see decisions/0001).
+- Two QA pins flipped ("// flipped by PRO4 (v2.1.0)"): qa-boundary-pro3 test 8
+  (CP-24 completion now releases the ticker) and test 7 (zero-step play() is a
+  documented no-op), and qa-boundary-pro6's CP-25 pin (shake(null) is a no-op,
+  not a raw TypeError).
+
+### Fixed
+
+- **CP-20** re-entrant `destroy()` from a zoom-ease callback no longer raw-
+  crashes: a `_destroyed` flag set first in destroy() and one check after the
+  ease callback abort the frame cleanly (delta **-1.65 ns/op**, within noise,
+  and only inside the zoom-animation branch).
+- **CP-24** a naturally completed sequence releases the shared-ticker refcount
+  via a camera-side duck-typed `seq.stop()` on the first update after completion;
+  a zero-step sequence's `play()` acquires no timeline at all.
+- **CP-25** `shake(null)`/`shake(undefined)` is a documented no-op (the guarded
+  getPreset idiom is now optional, never wrong); a non-object profile throws
+  `ERR_SHAKE_PROFILE`.
+- **CP-26** the bounds setters fail closed on a non-integer / out-of-range edge
+  type, a non-finite rect, or a non-finite/negative softZone (validate-before-
+  mutate; `ERR_CAMERA_BOUNDS`).
+- **QA-3** (found in qa) the three base-shake bridge GETTERS
+  (`shakeTrauma`/`shakeMaxOffset`/`shakeMaxAngle`) now fail closed post-destroy
+  with `ERR_CAMERA_DESTROYED`, symmetric with the setters -- reads no longer
+  silently return 0 / a stale value on a destroyed camera.
+
+**Size note -- read this if an artifact-size gate just fired.** The "." bundle
+grew **15.62 KB -> 17.68 KB gz** (15996 B -> 18109 B) because the "." graph
+(`CinematicCameraPro` + `BoundsSystem` + `ShakeEngine`) gained real feature code:
+the SOFT hold-out rewrite + `clampToBounds` + the CP-26 bounds doors, the CP-7
+resize override, the CP-9 base-shake bridge, the CP-20 guard, and the CP-25 shake
+door. The detach is intact -- parallax/sequence/debug stay out of "." (the
+import-graph + bundle-literal gates are still green), so the wrap work is
+subpath-only. New feature surface, not re-entangling; the size gate ceiling was
+re-measured to 18109 + 0.25 KB slack, never widened to pass.
+
 ## [2.0.0] -- 2026-08-31
 
 The detach. A bundler cannot drop a reachable class method, so every camera a

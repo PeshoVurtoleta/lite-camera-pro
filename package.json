@@ -1,7 +1,7 @@
 {
   "name": "@zakkster/lite-camera-pro",
   "author": "Zahary Shinikchiev <shinikchiev@yahoo.com>",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Cinematic camera system for Canvas2D games. Zero-GC, multi-target framing, noise-based shake, and timeline sequences.",
   "type": "module",
   "sideEffects": false,
@@ -83,7 +83,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@zakkster/lite-camera": "^1.0.0",
+    "@zakkster/lite-camera": "^1.2.2",
     "@zakkster/lite-ease": "^1.0.0",
     "@zakkster/lite-lerp": "^1.0.0",
     "@zakkster/lite-noise": "^1.0.0",

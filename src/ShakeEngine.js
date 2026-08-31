@@ -129,6 +129,19 @@ function acquireSlot(state) {
  * @param {number} [profile.intensity=1] Scale multiplier for the profile
  */
 export function addShake(state, profile, intensity = 1) {
+    // CP-25 (fail closed): a null/undefined profile is a documented no-op -- it
+    // keeps the 2.0.0 idiom `const p = getPreset(n); if (p) cam.shake(p, i)`
+    // valid (the guard becomes optional, never wrong) and matches the
+    // getPreset-returns-null precedent (decisions/0004). Any OTHER non-object
+    // (string, number, boolean, function, array) is a caller error, not a
+    // silent skip. Above the first `profile.trauma` deref, in this cold entry.
+    if (profile == null) return;
+    if (typeof profile !== "object" || Array.isArray(profile)) {
+        const e = new Error("addShake: profile must be an object or null; got " +
+            (Array.isArray(profile) ? "array" : typeof profile));
+        e.code = "ERR_SHAKE_PROFILE";
+        throw e;
+    }
     // CP-14 + CP-3 + H-F (fail closed): validate the WHOLE profile in this COLD
     // entry so the per-frame updateShake/computeShake loops gain zero new
     // branches. Every numeric is resolved to its documented default FIRST (the

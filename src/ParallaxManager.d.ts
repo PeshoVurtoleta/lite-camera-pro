@@ -22,6 +22,8 @@ export interface ParallaxLayer {
     offsetX: number;
     offsetY: number;
     wrap: number;
+    tileW: number;
+    tileH: number;
     scrollX: number;
     scrollY: number;
 }
@@ -38,6 +40,10 @@ export interface ParallaxLayerOptions {
     offsetX?: number;
     offsetY?: number;
     wrap?: number;
+    /** Tile size (world px) for wrapped axes. A REPEAT_X/BOTH wrap requires
+     *  tileW > 0; REPEAT_Y/BOTH requires tileH > 0, else code "ERR_PARALLAX_TILE". */
+    tileW?: number;
+    tileH?: number;
 }
 
 // -- Output shape for getLayerScroll --

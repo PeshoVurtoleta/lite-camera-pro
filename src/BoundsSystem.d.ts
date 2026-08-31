@@ -38,9 +38,14 @@ export interface BoundsEdgesConfig {
 }
 
 export declare function createBoundsState(): BoundsState;
+/** @throws Error `code = "ERR_CAMERA_BOUNDS"` if type is not an integer BoundsType in [0, 3]. */
 export declare function setBoundsAll(state: BoundsState, type: number): void;
+/** @throws Error `code = "ERR_CAMERA_BOUNDS"` if any provided edge is not an integer BoundsType in [0, 3]. */
 export declare function setBoundsEdges(state: BoundsState, config: BoundsEdgesConfig): void;
+/** @throws Error `code = "ERR_CAMERA_BOUNDS"` if any of x/y/w/h is non-finite. */
 export declare function setBoundsRect(state: BoundsState, x: number, y: number, w: number, h: number): void;
+/** @throws Error `code = "ERR_CAMERA_BOUNDS"` if softZone is non-finite or < 0, or elasticMax/elasticStrength non-finite. */
+export declare function setSoftZone(state: BoundsState, softZone: number, elasticMax?: number, elasticStrength?: number): void;
 export declare function clearBoundsRect(state: BoundsState): void;
 export declare function applyBounds(
     state: BoundsState,
@@ -51,4 +56,17 @@ export declare function applyBounds(
     visW: number,
     visH: number,
     dt: number,
+): void;
+/**
+ * HARD-clamp target AND pos into the effective bounds box (the resize re-clamp,
+ * D6). Always plain HARD -- a discontinuity correction, never SOFT/ELASTIC.
+ */
+export declare function clampToBounds(
+    state: BoundsState,
+    target: Float32Array,
+    pos: Float32Array,
+    maxX: number,
+    maxY: number,
+    visW: number,
+    visH: number,
 ): void;

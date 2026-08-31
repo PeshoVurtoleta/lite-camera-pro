@@ -50,18 +50,25 @@ void scrollX;
 import {
     createBoundsState,
     setBoundsAll,
+    setSoftZone,
     applyBounds,
+    clampToBounds,
     BoundsType,
     type BoundsState,
 } from '@zakkster/lite-camera-pro/bounds';
 
 const bounds: BoundsState = createBoundsState();
 setBoundsAll(bounds, BoundsType.SOFT);
+setSoftZone(bounds, 120, 40, 8);
 const target = new Float32Array([0, 0]);
 const pos = new Float32Array([0, 0]);
 applyBounds(bounds, target, pos, 1000, 800, 800, 600, 1 / 60);
+clampToBounds(bounds, target, pos, 1000, 800, 800, 600);
 const custom: boolean = bounds.customBounds;
 void custom;
+
+// PRO4 tile opts on parallax layers.
+addParallaxLayer(px, 'fg', 1.2, 1.2, { wrap: WrapMode.REPEAT_BOTH, tileW: 256, tileH: 256 });
 
 // -- ./multi -----------------------------------------------------------------
 import {
@@ -76,13 +83,14 @@ mt.targets = points;
 const mtCount: number = mt.count;
 void mtCount;
 
-// -- main entry: class + VERSION + the 20-name functional layer (D5) ---------
+// -- main entry: class + VERSION + the 22-name functional layer (D5) ---------
 // v2.0.0 detach: createCameraSequence is NO LONGER at "." -- it comes from the
 // ./sequence subpath; presets come from ./shake; withX from the subpaths.
 import CinematicCameraPro, {
     VERSION,
     FollowMode,
     type CameraAttachErrorCode,
+    type CameraDoorErrorCode,
 } from '@zakkster/lite-camera-pro';
 import { withSequences, type CameraSequence } from '@zakkster/lite-camera-pro/sequence';
 import { withParallax } from '@zakkster/lite-camera-pro/parallax';
@@ -104,4 +112,23 @@ const cfg: DebugHUDConfig = createDebugHUDConfig();
 const errCode: CameraAttachErrorCode = 'ERR_ALREADY_ATTACHED';
 const dur: number = seq.duration;
 const zoom: number = cam.zoom;
+
+// -- PRO4 surface: resize, the three base-shake bridge accessors, the four new
+//    door codes, and the readonly-dims trap. -------------------------------
+cam.resize(1600, 1200, 3200, 2400);
+cam.setSoftZone(80);
+cam.shakeMaxOffset = 60;
+cam.shakeMaxAngle = 0.08;
+cam.shakeTrauma = 0.5;
+const trauma: number = cam.shakeTrauma;
+const visW: number = cam.visibleW;
+// Each of the four new codes is assignable to the door-code union.
+const c1: CameraDoorErrorCode = 'ERR_CAMERA_BOUNDS';
+const c2: CameraDoorErrorCode = 'ERR_PARALLAX_TILE';
+const c3: CameraDoorErrorCode = 'ERR_SHAKE_PROFILE';
+const c4: CameraDoorErrorCode = 'ERR_CAMERA_SHAKE';
+// Dims are readonly (match the base): resize() is the only blessed write path.
+// @ts-expect-error viewW is readonly -- write it only through resize().
+cam.viewW = 100;
 void version; void dur; void zoom; void cfg; void errCode;
+void trauma; void visW; void c1; void c2; void c3; void c4;

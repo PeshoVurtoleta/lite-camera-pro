@@ -31,8 +31,10 @@ import {
     setBoundsAll,
     setBoundsEdges,
     setBoundsRect,
+    setSoftZone,
     clearBoundsRect,
     applyBounds,
+    clampToBounds,
     BoundsType
 } from './BoundsSystem.js';
 
@@ -138,6 +140,17 @@ export class CinematicCameraPro extends CinematicCamera {
         // ── Advanced shake engine (replaces base RNG shake) ──
         this._shake = createShakeState(seed);
 
+        // -- Base shake bridge (CP-9 / D3, decisions/0007) --
+        // shakeTrauma/shakeMaxOffset/shakeMaxAngle are prototype accessors that
+        // bridge to the default omni slot, so a base-style caller's shake works
+        // on Pro. These cold instance fields back the max-field accessors so a
+        // read returns what was written even before any trauma exists (base
+        // style, order-independent). Defaults match the base contract
+        // (LiteCamera 1.2.2 llms: maxOffset 15 px, maxAngle 0.05 rad). Declared
+        // on every instance so the hidden class stays stable (H-G).
+        this._baseMaxOffset = 15;
+        this._baseMaxAngle = 0.05;
+
         // ── Active sequence (null when no sequence is playing) ──
         this._seq = null;
 
@@ -163,6 +176,15 @@ export class CinematicCameraPro extends CinematicCamera {
 
         // -- Debug HUD configuration (null until withDebug attaches, CP-22) --
         this.debugConfig = null;
+
+        // -- Re-entrant destroy guard (CP-20 / D4). destroy() sets this true
+        // BEFORE nulling; update() checks it exactly once, right after the only
+        // synchronous user callback in the body (this._zoomEase), so a callback
+        // that destroys the camera mid-frame aborts the rest of the frame with a
+        // clean no-op instead of a raw null deref. Declared here so the hidden
+        // class is stable; false for a live camera. Not a hot-path cost: the
+        // check lives inside the `_zoomDur > 0` zoom-animation branch. --
+        this._destroyed = false;
     }
 
     // ─────────────────────────────────────────────────────
@@ -312,7 +334,129 @@ export class CinematicCameraPro extends CinematicCamera {
      */
     addTrauma(amount) {
         addTraumaSimple(this._shake, amount);
+        // Bridge stamp (D3): a base-style caller may configure shakeMaxOffset/
+        // shakeMaxAngle before firing; stamp the remembered fields onto the
+        // default slot AFTER addTraumaSimple so the amplitude reflects them.
+        // addTraumaSimple may have rejected (non-finite/<=0) and created
+        // nothing -- stamp only a live default slot. Cold path; the default
+        // fields (15 / 0.05) are the base numbers, so an unconfigured caller
+        // gets byte-identical feel (H-A).
+        const slot = this._baseSlot();
+        if (slot !== null) {
+            slot.maxOffset = this._baseMaxOffset;
+            slot.maxAngle = this._baseMaxAngle;
+        }
         return this;
+    }
+
+    // -- Base shake bridge accessors (CP-9 / D3). All COLD -- H-G: these names
+    // never appear inside update()/apply()/updateShake()/computeShake(). --
+
+    /**
+     * Find the active default (omni) shake slot, or null. Cold helper backing
+     * the base-shake bridge accessors; never called from a hot body.
+     * @returns {Object|null}
+     */
+    _baseSlot() {
+        const shake = this._shake;
+        // == null covers BOTH the destroyed camera (_shake nulled) and the
+        // window during super() where the base ctor writes shakeTrauma/
+        // shakeMaxOffset/shakeMaxAngle through these accessors before Pro has
+        // allocated _shake (it is undefined then). No slot exists in either case.
+        if (shake == null) return null;
+        for (let i = 0; i < shake.slotCount; i++) {
+            const s = shake.slots[i];
+            if (s.active && s.isDefault) return s;
+        }
+        return null;
+    }
+
+    /** Current base-style trauma [0, 1]: the active default slot's trauma, else 0. */
+    get shakeTrauma() {
+        if (this._shake === null) _dead(); // QA-3: symmetric with the setter (fail closed post-destroy)
+        const slot = this._baseSlot();
+        return slot === null ? 0 : slot.trauma;
+    }
+
+    /**
+     * Set base-style trauma. Non-finite -> ERR_CAMERA_SHAKE. v <= 0 deactivates
+     * the default slot (base: 0 = no shake). v > 0 finds-or-creates the default
+     * slot and ASSIGNS min(1, v) (assignment, not accumulation -- addTrauma
+     * accumulates, this field assigns; the base's documented difference), then
+     * stamps the remembered max fields.
+     */
+    set shakeTrauma(v) {
+        if (this._shake === null) _dead();
+        if (!Number.isFinite(v)) {
+            const e = new Error("CinematicCameraPro: shakeTrauma must be a finite number");
+            e.code = "ERR_CAMERA_SHAKE";
+            throw e;
+        }
+        const shake = this._shake;
+        let slot = this._baseSlot();
+        if (v <= 0) {
+            if (slot !== null) {
+                slot.active = false;
+                slot.trauma = 0;
+                // Recompute the aggregate active flag over remaining slots.
+                let anyActive = false;
+                for (let i = 0; i < shake.slotCount; i++) {
+                    if (shake.slots[i].active) { anyActive = true; break; }
+                }
+                shake.active = anyActive;
+            }
+            return;
+        }
+        if (slot === null) {
+            // Create a default slot with base defaults, then convert its trauma
+            // from the accumulate that addTraumaSimple performed to an assign.
+            addTraumaSimple(shake, Math.min(1, v));
+            slot = this._baseSlot();
+        }
+        if (slot !== null) {
+            slot.trauma = Math.min(1, v);
+            slot.maxOffset = this._baseMaxOffset;
+            slot.maxAngle = this._baseMaxAngle;
+            shake.active = true;
+        }
+    }
+
+    /** Base-style max shake translation at full trauma (px). Default 15. */
+    get shakeMaxOffset() {
+        if (this._shake === null) _dead(); // QA-3: symmetric with the setter (fail closed post-destroy)
+        return this._baseMaxOffset;
+    }
+
+    /** Set max shake translation. Non-finite -> ERR_CAMERA_SHAKE. Fires no shake. */
+    set shakeMaxOffset(v) {
+        if (this._shake === null) _dead();
+        if (!Number.isFinite(v)) {
+            const e = new Error("CinematicCameraPro: shakeMaxOffset must be a finite number");
+            e.code = "ERR_CAMERA_SHAKE";
+            throw e;
+        }
+        this._baseMaxOffset = v;
+        const slot = this._baseSlot();
+        if (slot !== null) slot.maxOffset = v;
+    }
+
+    /** Base-style max shake rotation at full trauma (rad). Default 0.05. */
+    get shakeMaxAngle() {
+        if (this._shake === null) _dead(); // QA-3: symmetric with the setter (fail closed post-destroy)
+        return this._baseMaxAngle;
+    }
+
+    /** Set max shake rotation. Non-finite -> ERR_CAMERA_SHAKE. Fires no shake. */
+    set shakeMaxAngle(v) {
+        if (this._shake === null) _dead();
+        if (!Number.isFinite(v)) {
+            const e = new Error("CinematicCameraPro: shakeMaxAngle must be a finite number");
+            e.code = "ERR_CAMERA_SHAKE";
+            throw e;
+        }
+        this._baseMaxAngle = v;
+        const slot = this._baseSlot();
+        if (slot !== null) slot.maxAngle = v;
     }
 
     /**
@@ -538,6 +682,22 @@ export class CinematicCameraPro extends CinematicCamera {
         return this;
     }
 
+    /**
+     * Set the SOFT-zone width (world px) and optionally the elastic tuning,
+     * with a finiteness door (CP-26 / D5). softZone must be finite and >= 0;
+     * elasticMax/elasticStrength, if provided, must be finite. Validate before
+     * mutate -- a rejected call throws ERR_CAMERA_BOUNDS with nothing changed.
+     *
+     * @param {number} softZone           Deceleration-zone width (px), >= 0
+     * @param {number} [elasticMax]       Max elastic overshoot (px)
+     * @param {number} [elasticStrength]  Elastic spring-back strength
+     * @returns {CinematicCameraPro} this
+     */
+    setSoftZone(softZone, elasticMax, elasticStrength) {
+        setSoftZone(this._bounds, softZone, elasticMax, elasticStrength);
+        return this;
+    }
+
     // ─────────────────────────────────────────────────────
     //  ZOOM API
     // ─────────────────────────────────────────────────────
@@ -706,6 +866,50 @@ export class CinematicCameraPro extends CinematicCamera {
         return out;
     }
 
+    // -----------------------------------------------------
+    //  RESIZE  (overrides base -- zoom-aware, CP-7)
+    // -----------------------------------------------------
+
+    /**
+     * Reconfigure viewport and/or world size, zoom-aware (CP-7 / D6,
+     * decisions/0005-0008). The base resize() clamps the pose to a ZOOM-UNAWARE
+     * max (worldW - viewW) and leaves visibleW stale until the next update() --
+     * yanking a zoomed camera short and exposing one stale frame. This override
+     * lands the whole thing in one continuous call:
+     *   1. read the live pose FIRST (pure reads mutate nothing, so a rejected
+     *      super.resize still leaves both sides untouched);
+     *   2. super.resize() validates the four dims and sets them (throws base
+     *      ERR_CAMERA_DIMS on garbage, nothing mutated -- Pro adds no second
+     *      door);
+     *   3. restore the pose the base clamp clobbered, recompute the zoom-aware
+     *      visibleW/H + _maxX/_maxY, then HARD-clamp target AND pos into the
+     *      zoom-aware box (custom rect honored). A resize is a discontinuity that
+     *      must land legal immediately, so the clamp is always plain HARD, never
+     *      SOFT/ELASTIC (those are per-frame feel). No stale-visibleW frame ever
+     *      exists; no yank, no bounce.
+     *
+     * @param {number} viewW
+     * @param {number} viewH
+     * @param {number} worldW
+     * @param {number} worldH
+     * @returns {CinematicCameraPro} this
+     * @throws {Error} base "ERR_CAMERA_DIMS" if any dim is non-finite or <= 0.
+     */
+    resize(viewW, viewH, worldW, worldH) {
+        const tx = this.target[0], ty = this.target[1];
+        const px = this.pos[0], py = this.pos[1];
+        super.resize(viewW, viewH, worldW, worldH);
+        this.target[0] = tx; this.target[1] = ty;
+        this.pos[0] = px;   this.pos[1] = py;
+        this._updateBoundsForZoom();
+        clampToBounds(
+            this._bounds, this.target, this.pos,
+            this._maxX, this._maxY,
+            this.visibleW, this.visibleH
+        );
+        return this;
+    }
+
     // ─────────────────────────────────────────────────────
     //  INTERNAL: Zoom helpers
     // ─────────────────────────────────────────────────────
@@ -803,7 +1007,19 @@ export class CinematicCameraPro extends CinematicCamera {
             // so step 6 glides back to follow. seq._state.blend is armed by a
             // natural completion and zeroed by stop()/destroy() -- a hard
             // handoff writes 0, no glide.
-            if (seq && !seq.playing) { this._blendRemain = seq._state.blend; this._seq = null; }
+            // CP-24 (D4): release the COMPLETED sequence's timeline here, on the
+            // first update() AFTER completion -- outside the ticker tick, which
+            // is exactly why it dodges the CP-20 re-entrancy class. Exact order:
+            // read blend FIRST (stop() zeroes it, PRO3 D-b), then the DUCK-TYPED
+            // stop() (2.0.0 attach law: no import from the class to ./sequence;
+            // the import-graph + literal gates enforce), then null _seq. stop()
+            // destroys the timeline (ticker refcount drops) but keeps steps, so
+            // play() replays (H-E).
+            if (seq && !seq.playing) {
+                this._blendRemain = seq._state.blend;
+                if (typeof seq.stop === "function") seq.stop();
+                this._seq = null;
+            }
 
         } else {
             // ── SINGLE-TARGET PATH ──
@@ -812,7 +1028,19 @@ export class CinematicCameraPro extends CinematicCamera {
             // so step 6 glides back to follow. seq._state.blend is armed by a
             // natural completion and zeroed by stop()/destroy() -- a hard
             // handoff writes 0, no glide.
-            if (seq && !seq.playing) { this._blendRemain = seq._state.blend; this._seq = null; }
+            // CP-24 (D4): release the COMPLETED sequence's timeline here, on the
+            // first update() AFTER completion -- outside the ticker tick, which
+            // is exactly why it dodges the CP-20 re-entrancy class. Exact order:
+            // read blend FIRST (stop() zeroes it, PRO3 D-b), then the DUCK-TYPED
+            // stop() (2.0.0 attach law: no import from the class to ./sequence;
+            // the import-graph + literal gates enforce), then null _seq. stop()
+            // destroys the timeline (ticker refcount drops) but keeps steps, so
+            // play() replays (H-E).
+            if (seq && !seq.playing) {
+                this._blendRemain = seq._state.blend;
+                if (typeof seq.stop === "function") seq.stop();
+                this._seq = null;
+            }
 
             // ── 1. Advance zoom animation ──
             const prevZoom = this.zoom;
@@ -822,6 +1050,14 @@ export class CinematicCameraPro extends CinematicCamera {
 
                 let t = clamp(this._zoomElapsed / this._zoomDur, 0, 1);
                 if (this._zoomEase) t = this._zoomEase(t);
+                // CP-20 (D4): _zoomEase is the only synchronous user callback in
+                // this body; if it re-entrantly called destroy(), every field
+                // below is nulled. Abort the rest of the frame with a clean
+                // no-op (matching the dt door's contract) instead of a raw null
+                // deref. Zero steady-state cost: this sits inside the
+                // `_zoomDur > 0` branch, so a camera not mid-zoom-animation
+                // executes it never.
+                if (this._destroyed) return;
 
                 this.zoom = lerp(this._zoomFrom, this._zoomTo, t);
 
@@ -1085,6 +1321,11 @@ export class CinematicCameraPro extends CinematicCamera {
      * "ERR_CAMERA_DESTROYED" (fail closed) rather than a raw null deref.
      */
     destroy() {
+        // CP-20 (D4): flag first, before any nulling, so a re-entrant call from
+        // a user callback still in flight (e.g. _zoomEase) sees a destroyed
+        // camera and the update() post-ease check aborts the frame.
+        this._destroyed = true;
+
         if (this._seq) {
             this._seq.destroy();
             this._seq = null;
@@ -1118,7 +1359,7 @@ export class CinematicCameraPro extends CinematicCamera {
             this.setMode = this.trackMultiple = this.trackSingle = this.setTargetCount =
             this.createSequence = this.playSequence = this.stopSequence =
             this.addParallaxLayer = this.removeParallaxLayer = this.applyParallax =
-            this.setBoundsType = this.setBoundsEdges = this.setBoundsRect = this.clearBoundsRect =
+            this.setBoundsType = this.setBoundsEdges = this.setBoundsRect = this.clearBoundsRect = this.setSoftZone =
             this.setZoom = this.zoomAt = this.screenToWorld = this.worldToScreen =
             this.getState = this.setState = this.resize = this.destroy = _dead;
     }
